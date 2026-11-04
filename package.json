@@ -1,0 +1,8 @@
+{
+  "name": "driver-telegram-bot",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "dependencies": {
+    "grammy": "^1.30.0"
+  }
+}
