@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>የአሽከርካሪ ምዝገባ</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --bg2: var(--tg-theme-secondary-bg-color, #f2f3f5);
+    --text: var(--tg-theme-text-color, #111111);
+    --hint: var(--tg-theme-hint-color, #8a8f98);
+    --accent: var(--tg-theme-button-color, #2481cc);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --danger: var(--tg-theme-destructive-text-color, #e5484d);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans Ethiopic", sans-serif; }
+  .wrap { padding: 16px 16px 96px; max-width: 560px; margin: 0 auto; }
+  header { margin-bottom: 18px; }
+  .steps { display: flex; gap: 6px; margin-bottom: 14px; }
+  .steps span { flex: 1; height: 4px; border-radius: 4px; background: var(--bg2); transition: background .2s; }
+  .steps span.on { background: var(--accent); }
+  .kicker { font-size: 13px; color: var(--hint); }
+  h1 { font-size: 22px; margin: 2px 0 0; }
+  section { display: none; }
+  section.active { display: block; animation: in .18s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .field { margin-bottom: 14px; }
+  label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .help { font-size: 12.5px; color: var(--hint); margin-top: 4px; }
+  input, select { width: 100%; padding: 13px 14px; font-size: 16px; color: var(--text);
+                  background: var(--bg2); border: 1.5px solid transparent; border-radius: var(--radius);
+                  outline: none; appearance: none; -webkit-appearance: none; }
+  select { background-image: linear-gradient(45deg, transparent 50%, var(--hint) 50%), linear-gradient(135deg, var(--hint) 50%, transparent 50%);
+           background-position: calc(100% - 20px) 55%, calc(100% - 15px) 55%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 36px; }
+  input:focus, select:focus { border-color: var(--accent); }
+  .invalid { border-color: var(--danger) !important; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row3 { display: grid; grid-template-columns: 1.4fr .8fr 1.3fr; gap: 10px; }
+  .choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .choice button { padding: 14px; border-radius: var(--radius); border: 1.5px solid var(--bg2); background: var(--bg2);
+                   color: var(--text); font-size: 15px; font-weight: 600; }
+  .choice button.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+  .card { background: var(--bg2); border-radius: var(--radius); padding: 4px 14px; margin-bottom: 14px; }
+  .card div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid color-mix(in srgb, var(--hint) 20%, transparent); font-size: 14.5px; }
+  .card div:last-child { border-bottom: 0; }
+  .card dt { color: var(--hint); } .card dd { margin: 0; text-align: right; font-weight: 600; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+  .check input { width: 20px; height: 20px; flex: none; margin-top: 2px; appearance: auto; -webkit-appearance: checkbox; }
+  .error { color: var(--danger); font-size: 14px; min-height: 20px; margin-top: 8px; }
+  .center { text-align: center; padding: 48px 12px; }
+  .center .icon { font-size: 56px; }
+  .center h2 { margin: 12px 0 6px; } .center p { color: var(--hint); margin: 0; }
+  .fallback { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px; background: var(--bg); display: none; gap: 10px; }
+  .fallback button { flex: 1; padding: 14px; border: 0; border-radius: var(--radius); font-size: 16px; font-weight: 600; background: var(--accent); color: var(--accent-text); }
+  .fallback button.sec { background: var(--bg2); color: var(--text); flex: .5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="screen-loading" class="center"><div class="icon">⏳</div><p>በመጫን ላይ...</p></div>
+
+  <div id="screen-message" class="center" hidden>
+    <div class="icon" id="msg-icon"></div><h2 id="msg-title"></h2><p id="msg-text"></p>
+  </div>
+
+  <form id="form" hidden novalidate>
+    <header>
+      <div class="steps"><span></span><span></span><span></span><span></span></div>
+      <div class="kicker" id="kicker"></div>
+      <h1 id="title"></h1>
+    </header>
+
+    <section data-title="የግል መረጃ">
+      <div class="field"><label for="full_name">ሙሉ ስም</label>
+        <input id="full_name" autocomplete="name" placeholder="ስም፣ የአባት ስም፣ የአያት ስም"></div>
+      <div class="field"><label for="phone">ስልክ ቁጥር</label>
+        <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="09XXXXXXXX">
+        <div class="help">ደንበኞች እና ቡድናችን የሚያገኙዎት በዚህ ቁጥር ነው።</div></div>
+      <div class="field"><label for="sub_city">የሚኖሩበት ክፍለ ከተማ</label>
+        <select id="sub_city" data-opts="SUB_CITIES"></select></div>
+    </section>
+
+    <section data-title="መንጃ ፈቃድ">
+      <div class="field"><label for="license_no">የመንጃ ፈቃድ ቁጥር</label>
+        <input id="license_no" autocapitalize="characters" placeholder="ለምሳሌ AA123456"></div>
+      <div class="field"><label for="license_grade">ደረጃ</label>
+        <select id="license_grade" data-opts="LICENSE_GRADES"></select></div>
+      <div class="field"><label for="license_expiry">የሚያበቃበት ቀን (እ.ኤ.አ.)</label>
+        <input id="license_expiry" type="date"></div>
+    </section>
+
+    <section data-title="ተሽከርካሪ">
+      <label>የራስዎ ተሽከርካሪ አለዎት?</label>
+      <div class="choice" id="has_vehicle">
+        <button type="button" data-v="yes">🚗 አዎ፣ አለኝ</button>
+        <button type="button" data-v="no">🙋 የለኝም</button>
+      </div>
+      <div id="vehicle-fields" hidden>
+        <div class="row">
+          <div class="field"><label for="vehicle_type">ዓይነት</label><select id="vehicle_type" data-opts="VEHICLE_TYPES"></select></div>
+          <div class="field"><label for="vehicle_year">የተመረተበት ዓመት</label><input id="vehicle_year" type="number" inputmode="numeric" placeholder="2015"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="vehicle_model">ሞዴል</label><input id="vehicle_model" placeholder="Toyota Vitz"></div>
+          <div class="field"><label for="vehicle_color">ቀለም</label><input id="vehicle_color" placeholder="ነጭ"></div>
+        </div>
+        <label>የሰሌዳ ቁጥር</label>
+        <div class="row3">
+          <div class="field"><select id="plate_region" data-opts="PLATE_REGIONS" aria-label="ክልል"></select></div>
+          <div class="field"><input id="plate_code" inputmode="numeric" maxlength="2" placeholder="ኮድ" aria-label="ኮድ"></div>
+          <div class="field"><input id="plate_number" autocapitalize="characters" maxlength="8" placeholder="A12345" aria-label="ቁጥር"></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-title="ያረጋግጡ እና ይላኩ">
+      <dl class="card" id="review"></dl>
+      <label class="check"><input type="checkbox" id="consent">
+        <span>ያስገባሁት መረጃ ትክክል መሆኑን አረጋግጣለሁ፤ መረጃዬ ለምዝገባ ዓላማ እንዲውልም እስማማለሁ።</span></label>
+    </section>
+
+    <div class="error" id="error"></div>
+  </form>
+</div>
+<div class="fallback" id="fallback"><button type="button" class="sec" id="fb-back">ተመለስ</button><button type="button" id="fb-next">ቀጣይ</button></div>
+
+<script>
+(function () {
+  "use strict";
+  var OPTIONS = __OPTIONS__;
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var $ = function (id) { return document.getElementById(id); };
+  var sections = [].slice.call(document.querySelectorAll("section"));
+  var step = 0, hasVehicle = null, busy = false;
+  var useMain = !!(tg && tg.MainButton && tg.platform !== "unknown");
+
+  function show(id) {
+    ["screen-loading", "screen-message", "form"].forEach(function (s) { $(s).hidden = s !== id; });
+  }
+  function message(icon, title, text) {
+    $("msg-icon").textContent = icon; $("msg-title").textContent = title; $("msg-text").textContent = text;
+    show("screen-message"); setButtons(null);
+  }
+
+  // ምርጫዎችን መሙላት
+  [].forEach.call(document.querySelectorAll("select[data-opts]"), function (sel) {
+    var first = document.createElement("option");
+    first.value = ""; first.textContent = sel.getAttribute("aria-label") || "— ይምረጡ —";
+    sel.appendChild(first);
+    OPTIONS[sel.dataset.opts].forEach(function (v) {
+      var o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o);
+    });
+  });
+  $("license_expiry").min = new Date().toISOString().slice(0, 10);
+
+  [].forEach.call(document.querySelectorAll("#has_vehicle button"), function (b) {
+    b.addEventListener("click", function () { setVehicle(b.dataset.v === "yes"); haptic("selection"); });
+  });
+  function setVehicle(v) {
+    hasVehicle = v;
+    [].forEach.call(document.querySelectorAll("#has_vehicle button"), function (b) {
+      b.classList.toggle("sel", (b.dataset.v === "yes") === v);
+    });
+    $("vehicle-fields").hidden = !v;
+  }
+
+  function haptic(kind) {
+    try {
+      if (!tg || !tg.HapticFeedback) return;
+      if (kind === "selection") tg.HapticFeedback.selectionChanged();
+      else tg.HapticFeedback.notificationOccurred(kind);
+    } catch (e) {}
+  }
+
+  var STEP_FIELDS = [
+    ["full_name", "phone", "sub_city"],
+    ["license_no", "license_grade", "license_expiry"],
+    [], []
+  ];
+  var VEHICLE_FIELDS = ["vehicle_type", "vehicle_year", "vehicle_model", "vehicle_color", "plate_region", "plate_code", "plate_number"];
+
+  function val(id) { return ($(id).value || "").trim(); }
+
+  function validateStep() {
+    var fields = STEP_FIELDS[step].slice(), err = "";
+    if (step === 2) {
+      if (hasVehicle === null) return "ተሽከርካሪ እንዳለዎት ይምረጡ።";
+      if (hasVehicle) fields = VEHICLE_FIELDS;
+    }
+    if (step === 3 && !$("consent").checked) return "ለመቀጠል መረጃው ትክክል መሆኑን ያረጋግጡ።";
+    fields.forEach(function (f) {
+      var bad = !val(f);
+      if (f === "full_name" && val(f).split(/\s+/).length < 2) bad = true;
+      if (f === "phone" && !/^(\+?251|0)?[79]\d{8}$/.test(val(f).replace(/[\s\-()]/g, ""))) bad = true;
+      if (f === "license_expiry" && val(f) && val(f) < new Date().toISOString().slice(0, 10)) { bad = true; err = err || "መንጃ ፈቃድዎ ጊዜው አልፎበታል።"; }
+      $(f).classList.toggle("invalid", bad);
+      if (bad && !err) err = f === "full_name" ? "ሙሉ ስምዎን ያስገቡ (ቢያንስ ስም እና የአባት ስም)።"
+                         : f === "phone" ? "ትክክለኛ ስልክ ቁጥር ያስገቡ (ለምሳሌ 0911234567)።"
+                         : "እባክዎ ሁሉንም መስኮች ይሙሉ።";
+    });
+    return err;
+  }
+
+  function profile() {
+    var p = { has_vehicle: hasVehicle ? "yes" : "no" };
+    STEP_FIELDS[0].concat(STEP_FIELDS[1]).forEach(function (f) { p[f] = val(f); });
+    if (hasVehicle) VEHICLE_FIELDS.forEach(function (f) { p[f] = val(f); });
+    return p;
+  }
+
+  function buildReview() {
+    var p = profile(), rows = [
+      ["ስም", p.full_name], ["ስልክ", p.phone], ["ክፍለ ከተማ", p.sub_city],
+      ["መንጃ ፈቃድ", p.license_no + " · " + p.license_grade], ["የሚያበቃበት", p.license_expiry]
+    ];
+    if (hasVehicle) rows.push(
+      ["ተሽከርካሪ", p.vehicle_model + " (" + p.vehicle_type + ", " + p.vehicle_year + ")"],
+      ["ቀለም", p.vehicle_color], ["ሰሌዳ", p.plate_region + " · " + p.plate_code + " · " + p.plate_number.toUpperCase()]
+    ); else rows.push(["ተሽከርካሪ", "የለኝም"]);
+    var dl = $("review"); dl.innerHTML = "";
+    rows.forEach(function (r) {
+      var d = document.createElement("div"), dt = document.createElement("dt"), dd = document.createElement("dd");
+      dt.textContent = r[0]; dd.textContent = r[1]; d.appendChild(dt); d.appendChild(dd); dl.appendChild(d);
+    });
+  }
+
+  function render() {
+    sections.forEach(function (s, i) { s.classList.toggle("active", i === step); });
+    [].forEach.call(document.querySelectorAll(".steps span"), function (s, i) { s.classList.toggle("on", i <= step); });
+    $("kicker").textContent = "ደረጃ " + (step + 1) + " ከ " + sections.length;
+    $("title").textContent = sections[step].dataset.title;
+    $("error").textContent = "";
+    if (step === 3) buildReview();
+    setButtons(step === 3 ? "ምዝገባ ላክ" : "ቀጣይ");
+    window.scrollTo(0, 0);
+  }
+
+  function setButtons(text) {
+    if (useMain) {
+      if (text) { tg.MainButton.setText(text); tg.MainButton.show(); } else tg.MainButton.hide();
+      if (text && step > 0) tg.BackButton.show(); else tg.BackButton.hide();
+    } else {
+      $("fallback").style.display = text ? "flex" : "none";
+      $("fb-next").textContent = text || "";
+      $("fb-back").style.display = step > 0 ? "" : "none";
+    }
+  }
+
+  function next() {
+    if (busy) return;
+    var err = validateStep();
+    if (err) { $("error").textContent = err; haptic("error"); return; }
+    if (step < sections.length - 1) { step++; render(); return; }
+    submit();
+  }
+  function back() { if (step > 0 && !busy) { step--; render(); } }
+
+  function api(path, body) {
+    body.initData = tg ? tg.initData : "";
+    return fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (j) { j._status = r.status; return j; }); });
+  }
+
+  function submit() {
+    busy = true;
+    if (useMain) tg.MainButton.showProgress(false); else $("fb-next").disabled = true;
+    api("/api/register", { profile: profile() }).then(function (res) {
+      if (!res.ok) throw new Error(res.error || "ስህተት አጋጥሟል");
+      haptic("success");
+      message("✅", "ቅጹ በተሳካ ሁኔታ ተልኳል!", "አሁን ወደ ቻቱ ይመለሱ እና የተጠየቁትን ሰነዶች ፎቶ ይላኩ።");
+      setTimeout(function () { if (tg) tg.close(); }, 2200);
+    }).catch(function (e) {
+      $("error").textContent = e.message || "የኢንተርኔት ችግር አጋጥሟል፤ እንደገና ይሞክሩ።"; haptic("error");
+    }).then(function () {
+      busy = false;
+      if (useMain) tg.MainButton.hideProgress(); else $("fb-next").disabled = false;
+    });
+  }
+
+  function prefill(d, user) {
+    if (d) {
+      Object.keys(d).forEach(function (k) { if ($(k) && d[k] != null && k !== "has_vehicle") $(k).value = d[k]; });
+      setVehicle(!!d.has_vehicle);
+    } else if (user) {
+      $("full_name").value = [user.first_name, user.last_name].filter(Boolean).join(" ");
+    }
+  }
+
+  // ጅምር
+  if (useMain) { tg.MainButton.onClick(next); tg.BackButton.onClick(back); }
+  $("fb-next").addEventListener("click", next);
+  $("fb-back").addEventListener("click", back);
+  $("form").addEventListener("submit", function (e) { e.preventDefault(); next(); });
+
+  if (!tg || !tg.initData) {
+    message("📱", "ከTelegram ውስጥ ይክፈቱ", "ይህ ቅጽ የሚሰራው ከቦቱ ውስጥ ባለው \"ምዝገባ\" አዝራር ሲከፈት ብቻ ነው።");
+    return;
+  }
+  tg.ready(); tg.expand();
+  try { tg.enableClosingConfirmation(); } catch (e) {}
+
+  api("/api/me", {}).then(function (res) {
+    if (res._status === 401) return message("🔒", "ማረጋገጥ አልተቻለም", res.error || "ቦቱን እንደገና ከፍተው ይሞክሩ።");
+    var d = res.driver;
+    if (d && d.status === "pending") return message("⏳", "ማመልከቻዎ በግምገማ ላይ ነው", "ውሳኔው እንደደረሰ በቦቱ እናሳውቅዎታለን።");
+    if (d && d.status === "approved") return message("🎉", "ምዝገባዎ ጸድቋል", "ተጨማሪ ምዝገባ አያስፈልግም።");
+    prefill(d, res.user);
+    show("form"); render();
+    if (d && d.status === "rejected" && d.reject_reason) $("error").textContent = "ያለፈው ማመልከቻ ውድቅ የሆነበት ምክንያት፦ " + d.reject_reason;
+  }).catch(function () {
+    message("📡", "መገናኘት አልተቻለም", "የኢንተርኔት ግንኙነትዎን አረጋግጠው እንደገና ይክፈቱ።");
+  });
+})();
+</script>
+</body>
+</html>

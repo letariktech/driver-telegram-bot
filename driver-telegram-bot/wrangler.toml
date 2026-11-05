@@ -1,0 +1,31 @@
+name = "driver-telegram-bot"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# በdashboard ላይ የተቀመጡ ተለዋዋጮች (ለምሳሌ ADMIN_CHAT_ID) በdeploy ጊዜ እንዳይሰረዙ
+keep_vars = true
+
+# HTML ፋይሉን እንደ ጽሑፍ ማስገባት
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
+# D1 ዳታቤዝ — ID ሳይኖር ሲቀር Cloudflare በመጀመሪያው deploy በራሱ ይፈጥረዋል
+[[d1_databases]]
+binding = "DB"
+database_name = "driver-telegram-bot-db"
+
+[observability]
+enabled = true
+
+# ሚስጥር ያልሆኑ ቅንብሮች (በdashboard ላይም መቀየር ይቻላል)
+[vars]
+SUPPORT_CONTACT = ""
+DRIVER_GROUP_LINK = ""
+
+# ሚስጥሮች (በ `npx wrangler secret put` ወይም በdashboard → Settings → Variables and Secrets)፦
+#   BOT_TOKEN       — ከ @BotFather
+#   WEBHOOK_SECRET  — ማንኛውም ረጅም የዘፈቀደ ጽሑፍ (A-Z a-z 0-9 _ -)
+#   ADMIN_CHAT_ID   — ማመልከቻዎች የሚላኩበት ቻት/ግሩፕ ID
+#   ADMIN_IDS       — (አማራጭ) ማጽደቅ የሚችሉ አስተዳዳሪዎች Telegram ID፣ በኮማ ተለያይተው
