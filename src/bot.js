@@ -116,12 +116,28 @@ async function submitForReview(api, env, d) {
     "🎉 <b>ማመልከቻዎ ሙሉ በሙሉ ቀርቧል!</b>\n\nቡድናችን መረጃዎን ገምግሞ ውሳኔውን እዚሁ ያሳውቅዎታል። ሁኔታውን በማንኛውም ጊዜ በ /status ማየት ይችላሉ።",
     HTML
   );
+  await notifyAdmins(api, env, fresh, await db.getDocs(env.DB, d.tg_id));
+}
+
+/** ወደ ADMIN_CHAT_ID ይልካል፤ ካልተሳካ ለእያንዳንዱ አስተዳዳሪ በግል ስህተቱን ጨምሮ ይልካል */
+async function notifyAdmins(api, env, d, docs) {
   const chat = adminChat(env);
+  let reason = "ADMIN_CHAT_ID አልተቀመጠም";
   if (chat) {
     try {
-      await sendReview(api, chat, fresh, await db.getDocs(env.DB, d.tg_id));
+      return await sendReview(api, chat, d, docs);
     } catch (e) {
-      console.error("admin notify failed", e);
+      reason = e.description ?? e.message;
+      console.error("admin notify failed", chat, reason);
+    }
+  }
+  for (const id of adminIds(env).filter((x) => x !== chat)) {
+    try {
+      await api.sendMessage(id, `⚠️ ማመልከቻውን ወደ ADMIN_CHAT_ID (<code>${esc(chat)}</code>) መላክ አልተቻለም፦
+<code>${esc(reason)}</code>`, HTML);
+      await sendReview(api, id, d, docs);
+    } catch (e) {
+      console.error("fallback notify failed", id, e.description ?? e.message);
     }
   }
 }
@@ -382,6 +398,16 @@ export async function setup(env, origin) {
       await bot.api.setMyCommands(adminCommands, { scope: { type: "chat", chat_id } });
     } catch (e) {
       results[`commands_${chat_id}`] = String(e.description ?? e.message);
+    }
+  }
+  // የADMIN_CHAT_ID ሙከራ — ቦቱ ወደዚያ መላክ ይችል እንደሆነ
+  const chat = adminChat(env);
+  if (chat) {
+    try {
+      await bot.api.sendMessage(chat, "✅ የአሽከርካሪ ማመልከቻዎች ወደዚህ ቻት ይደርሳሉ።");
+      results.admin_chat = `ok (${chat})`;
+    } catch (e) {
+      results.admin_chat = `FAILED (${chat}): ${e.description ?? e.message}`;
     }
   }
   await bot.api.setChatMenuButton({
