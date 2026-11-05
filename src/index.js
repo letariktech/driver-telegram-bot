@@ -1,118 +1,69 @@
-import { Bot, InlineKeyboard, webhookCallback } from "grammy";
+import { webhookCallback } from "grammy";
+import { getBot, setOrigin, setup } from "./bot.js";
+import { handleApi } from "./api.js";
+import { ensureSchema } from "./db.js";
+import { SUB_CITIES, LICENSE_GRADES, VEHICLE_TYPES, PLATE_REGIONS } from "./constants.js";
+import FORM_HTML from "./webapp.html";
+
+const OPTIONS = JSON.stringify({ SUB_CITIES, LICENSE_GRADES, VEHICLE_TYPES, PLATE_REGIONS });
+const PAGE = FORM_HTML.replace("__OPTIONS__", OPTIONS.replace(/</g, "\\u003c"));
+
+const json = (data, status = 200) =>
+  new Response(JSON.stringify(data, null, 2), { status, headers: { "content-type": "application/json; charset=utf-8" } });
+
+let handler = null;
 
 export default {
   async fetch(request, env) {
-    // 1. በብሮውዘር ሲከፈት ጤናማ መሆኑን ማሳየት
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, "") || "/";
+    setOrigin(url.origin);
+
+    const missing = ["BOT_TOKEN", "WEBHOOK_SECRET", "ADMIN_CHAT_ID"].filter((k) => !env[k]);
+    if (!env.DB) missing.push("DB (D1 binding)");
+
     if (request.method === "GET") {
-      return new Response("🚗 Driver Bot Worker is active and running successfully!", {
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      });
-    }
-
-    if (!env.BOT_TOKEN) {
-      return new Response("Error: BOT_TOKEN is missing!", { status: 500 });
-    }
-
-    const bot = new Bot(env.BOT_TOKEN);
-    const adminId = env.ADMIN_CHAT_ID ? parseInt(env.ADMIN_CHAT_ID, 10) : null;
-
-    // 2. /start ትዕዛዝ
-    bot.command("start", async (ctx) => {
-      const miniAppUrl = "https://driver-telegram-bot.letarik.workers.dev";
-      const keyboard = new InlineKeyboard().webApp("🚗 የምዝገባ ቅጽ ክፈት", miniAppUrl);
-
-      await ctx.reply(
-        "👋 እንኳን ደህና መጡ ወደ አሽከርካሪዎች መመዝገቢያ ፖርታል!\n\nምዝገባዎን በአንድ ገጽ ላይ ለማጠናቀቅ ከታች ያለውን አዝራር ይጫኑ፦",
-        { reply_markup: keyboard }
-      );
-    });
-
-    // 3. ከሚኒ አፑ መረጃ ሲደርስ
-    bot.on("message:web_app_data", async (ctx) => {
-      try {
-        const data = JSON.parse(ctx.message.web_app_data.data);
-        const userId = ctx.from.id;
-
-        // ለአሽከርካሪው የሚላክ ማረጋገጫ
-        await ctx.reply(
-          `🎉 **የምዝገባ መረጃዎ በተሳካ ሁኔታ ደርሶናል!**\n\n` +
-          `👤 **ስም፦** ${data.fullName}\n` +
-          `📞 **ስልክ፦** ${data.phoneNumber}\n` +
-          `🚗 **ተሽከርካሪ፦** ${data.vehicleModel}\n` +
-          `🔢 **ሰሌዳ፦** ${data.plateCode}-${data.plateNumber}\n\n` +
-          `📌 **የመጨረሻ ደረጃ፦** እባክዎ አሁን እዚህ ቻት ላይ **የመንጃ ፈቃድዎን ፎቶ** ይላኩልን፦`
-        );
-
-        // ለአስተዳዳሪ (Admin) የሚላክ የመጀመሪያ ማሳወቂያ
-        if (adminId) {
-          await ctx.api.sendMessage(
-            adminId,
-            `🚨 **አዲስ የአሽከርካሪ ምዝገባ ተሞልቷል!**\n\n` +
-            `👤 **ስም፦** ${data.fullName}\n` +
-            `📞 **ስልክ፦** ${data.phoneNumber}\n` +
-            `🚗 **ተሽከርካሪ፦** ${data.vehicleModel}\n` +
-            `🔢 **ሰሌዳ፦** ${data.plateCode}-${data.plateNumber}\n` +
-            `🆔 **Telegram ID፦** \`${userId}\`\n\n` +
-            `⏳ የመንጃ ፈቃድ ፎቶ በመጠበቅ ላይ...`
-          );
+      if (path === "/") {
+        return new Response(PAGE, {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "cache-control": "no-cache",
+            "x-content-type-options": "nosniff",
+            "referrer-policy": "no-referrer",
+          },
+        });
+      }
+      if (path === "/health") return json({ ok: missing.length === 0, missing });
+      if (path === "/setup") {
+        if (missing.length) return json({ ok: false, missing }, 500);
+        if (url.searchParams.get("key") !== env.WEBHOOK_SECRET) return json({ ok: false, error: "Unauthorized" }, 401);
+        try {
+          return json(await setup(env, url.origin));
+        } catch (e) {
+          return json({ ok: false, error: String(e.description ?? e.message) }, 500);
         }
-      } catch (e) {
-        await ctx.reply("የመረጃ ስህተት አጋጥሟል፤ እባክዎ እንደገና ይሞክሩ።");
       }
-    });
+      return new Response("Not found", { status: 404 });
+    }
 
-    // 4. አሽከርካሪው የመንጃ ፈቃድ ፎቶ ሲልክ
-    bot.on("message:photo", async (ctx) => {
-      const userId = ctx.from.id;
-      const userName = ctx.from.first_name || "አሽከርካሪ";
-      const photos = ctx.message.photo;
-      const fileId = photos[photos.length - 1].file_id;
+    if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+    if (missing.length) return json({ ok: false, missing }, 500);
 
-      await ctx.reply("የመንጃ ፈቃድ ሰነድዎ ደርሶናል! ✅\nመረጃዎ ተገምግሞ ውሳኔው በቅርቡ ይደርስዎታል።");
+    await ensureSchema(env.DB);
 
-      // ለአስተዳዳሪው ፎቶውን ከነማጽደቂያ አዝራሮቹ መላክ
-      if (adminId) {
-        const adminKeyboard = new InlineKeyboard()
-          .text("✅ አጽድቅ (Approve)", `approve_${userId}`)
-          .text("❌ ውድቅ አድርግ (Reject)", `reject_${userId}`);
+    if (path.startsWith("/api/")) {
+      if (path !== "/api/me" && path !== "/api/register") return new Response("Not found", { status: 404 });
+      return handleApi(request, env, path, getBot);
+    }
 
-        await ctx.api.sendPhoto(adminId, fileId, {
-          caption: `📄 **የመንጃ ፈቃድ ሰነድ**\n👤 ከአሽከርካሪ፦ ${userName} (\`${userId}\`)`,
-          reply_markup: adminKeyboard,
-        });
+    if (path === "/webhook" || path === "/") {
+      if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== env.WEBHOOK_SECRET) {
+        return new Response("Unauthorized", { status: 401 });
       }
-    });
+      handler ??= webhookCallback(getBot(env), "cloudflare-mod");
+      return handler(request);
+    }
 
-    // 5. የአስተዳዳሪ ውሳኔ (Approve / Reject)
-    bot.callbackQuery(/^(approve|reject)_(\d+)$/, async (ctx) => {
-      const action = ctx.match[1];
-      const driverId = parseInt(ctx.match[2], 10);
-
-      if (action === "approve") {
-        await ctx.answerCallbackQuery({ text: "አሽከርካሪው ጸድቋል!" });
-        await ctx.editMessageCaption({
-          caption: `${ctx.msg?.caption}\n\n🟢 **ውሳኔ፦ ጸድቋል (Approved)**`,
-        });
-
-        // ለአሽከርካሪው መልዕክት መላክ
-        await ctx.api.sendMessage(
-          driverId,
-          "🎉 እንኳን ደስ አለዎት! የአሽከርካሪነት ምዝገባዎ ጸድቋል። ስራ መጀመር ይችላሉ።"
-        );
-      } else {
-        await ctx.answerCallbackQuery({ text: "ምዝገባው ውድቅ ተደርጓል!" });
-        await ctx.editMessageCaption({
-          caption: `${ctx.msg?.caption}\n\n🔴 **ውሳኔ፦ ውድቅ ተደርጓል (Rejected)**`,
-        });
-
-        await ctx.api.sendMessage(
-          driverId,
-          "ይቅርታ፣ ያስገቡት መረጃ ወይም ሰነድ ባለመሟላቱ ምዝገባዎ ውድቅ ተደርጓል። እባክዎ እንደገና ይመዝገቡ።"
-        );
-      }
-    });
-
-    const handleUpdate = webhookCallback(bot, "cloudflare-mod");
-    return handleUpdate(request);
+    return new Response("Not found", { status: 404 });
   },
 };
