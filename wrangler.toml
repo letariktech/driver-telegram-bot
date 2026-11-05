@@ -20,9 +20,15 @@ database_name = "driver-telegram-bot-db"
 enabled = true
 
 # ሚስጥር ያልሆኑ ቅንብሮች (በdashboard ላይም መቀየር ይቻላል)
+# በየቀኑ 09:00 (የአዲስ አበባ ሰዓት = 06:00 UTC) — ማስታወሻዎች እና የአስተዳዳሪ ማጠቃለያ
+[triggers]
+crons = ["0 6 * * *"]
+
 [vars]
-SUPPORT_CONTACT = ""
-DRIVER_GROUP_LINK = ""
+BRAND_NAME = "Cabby"
+SUPPORT_CONTACT = ""     # ለምሳሌ "0911000000 ወይም @cabby_support"
+DRIVER_APP_LINK = ""     # ሲጸድቁ የሚላክ የDriver መተግበሪያ ማውረጃ ሊንክ
+DRIVER_GROUP_LINK = ""   # ሲጸድቁ የሚላክ የአሽከርካሪዎች ግሩፕ ሊንክ
 
 # ሚስጥሮች (በ `npx wrangler secret put` ወይም በdashboard → Settings → Variables and Secrets)፦
 #   BOT_TOKEN       — ከ @BotFather
