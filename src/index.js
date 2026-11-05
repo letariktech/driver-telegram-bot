@@ -18,7 +18,7 @@ export default {
 
     // 2. /start ትዕዛዝ
     bot.command("start", async (ctx) => {
-      const miniAppUrl = env.MINI_APP_URL || "https://driver-registration.pages.dev";
+      const miniAppUrl = env.MINI_APP_URL || "https://driver-telegram-bot.letarik.workers.dev";
       const keyboard = new InlineKeyboard().webApp("🚗 የምዝገባ ቅጽ ክፈት", miniAppUrl);
 
       await ctx.reply(
