@@ -1,12 +1,21 @@
 import { webhookCallback } from "grammy";
-import { getBot, setOrigin, setup } from "./bot.js";
+import { getBot, setOrigin, setup, runDaily } from "./bot.js";
 import { handleApi } from "./api.js";
 import { ensureSchema } from "./db.js";
-import { SUB_CITIES, LICENSE_GRADES, VEHICLE_TYPES, PLATE_REGIONS } from "./constants.js";
+import * as C from "./constants.js";
 import FORM_HTML from "./webapp.html";
 
-const OPTIONS = JSON.stringify({ SUB_CITIES, LICENSE_GRADES, VEHICLE_TYPES, PLATE_REGIONS });
-const PAGE = FORM_HTML.replace("__OPTIONS__", OPTIONS.replace(/</g, "\\u003c"));
+const OPTIONS = JSON.stringify({
+  SUB_CITIES: C.SUB_CITIES, LANGUAGES: C.LANGUAGES, LICENSE_GRADES: C.LICENSE_GRADES, EXPERIENCE: C.EXPERIENCE,
+  PREV_PLATFORMS: C.PREV_PLATFORMS, VEHICLE_MODES: C.VEHICLE_MODES, VEHICLE_TYPES: C.VEHICLE_TYPES, SEATS: C.SEATS,
+  PLATE_REGIONS: C.PLATE_REGIONS, SERVICES: C.SERVICES, SHIFTS: C.SHIFTS, PHONE_TYPES: C.PHONE_TYPES,
+  MIN_AGE: C.MIN_AGE, MIN_VEHICLE_YEAR: C.MIN_VEHICLE_YEAR,
+}).replace(/</g, "\\u003c");
+const pages = new Map();
+const page = (brand) => {
+  if (!pages.has(brand)) pages.set(brand, FORM_HTML.replace("__OPTIONS__", OPTIONS).replaceAll("__BRAND__", brand.replace(/[<>&"]/g, "")));
+  return pages.get(brand);
+};
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data, null, 2), { status, headers: { "content-type": "application/json; charset=utf-8" } });
@@ -24,7 +33,7 @@ export default {
 
     if (request.method === "GET") {
       if (path === "/") {
-        return new Response(PAGE, {
+        return new Response(page(env.BRAND_NAME || "Cabby"), {
           headers: {
             "content-type": "text/html; charset=utf-8",
             "cache-control": "no-cache",
@@ -65,5 +74,12 @@ export default {
     }
 
     return new Response("Not found", { status: 404 });
+  },
+
+  // በየቀኑ (wrangler.toml → [triggers]) — ማስታወሻዎች እና የአስተዳዳሪ ማጠቃለያ
+  async scheduled(event, env, ctx) {
+    if (!env.DB || !env.BOT_TOKEN) return;
+    await ensureSchema(env.DB);
+    ctx.waitUntil(runDaily(env).then((r) => console.log("daily", r)));
   },
 };

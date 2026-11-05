@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>የአሽከርካሪ ምዝገባ</title>
+<title>__BRAND__ — የአሽከርካሪ ምዝገባ</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
@@ -14,92 +14,115 @@
     --accent: var(--tg-theme-button-color, #2481cc);
     --accent-text: var(--tg-theme-button-text-color, #ffffff);
     --danger: var(--tg-theme-destructive-text-color, #e5484d);
+    --line: color-mix(in srgb, var(--hint) 22%, transparent);
     --radius: 12px;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 16px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans Ethiopic", sans-serif; }
-  .wrap { padding: 16px 16px 96px; max-width: 560px; margin: 0 auto; }
-  header { margin-bottom: 18px; }
-  .steps { display: flex; gap: 6px; margin-bottom: 14px; }
+  .wrap { padding: 16px 16px 100px; max-width: 560px; margin: 0 auto; }
+  .brand { font-weight: 800; letter-spacing: .3px; font-size: 15px; color: var(--accent); margin-bottom: 10px; }
+  .steps { display: flex; gap: 5px; margin-bottom: 14px; }
   .steps span { flex: 1; height: 4px; border-radius: 4px; background: var(--bg2); transition: background .2s; }
   .steps span.on { background: var(--accent); }
   .kicker { font-size: 13px; color: var(--hint); }
-  h1 { font-size: 22px; margin: 2px 0 0; }
+  h1 { font-size: 22px; margin: 2px 0 4px; }
+  .lead { color: var(--hint); font-size: 14px; margin: 0 0 18px; }
   section { display: none; }
   section.active { display: block; animation: in .18s ease-out; }
   @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-  .field { margin-bottom: 14px; }
-  label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-  .help { font-size: 12.5px; color: var(--hint); margin-top: 4px; }
+  .field { margin-bottom: 15px; }
+  label, .label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .opt { font-weight: 400; color: var(--hint); }
+  .help { font-size: 12.5px; color: var(--hint); margin-top: 5px; }
   input, select { width: 100%; padding: 13px 14px; font-size: 16px; color: var(--text);
                   background: var(--bg2); border: 1.5px solid transparent; border-radius: var(--radius);
-                  outline: none; appearance: none; -webkit-appearance: none; }
+                  outline: none; appearance: none; -webkit-appearance: none; font-family: inherit; }
   select { background-image: linear-gradient(45deg, transparent 50%, var(--hint) 50%), linear-gradient(135deg, var(--hint) 50%, transparent 50%);
            background-position: calc(100% - 20px) 55%, calc(100% - 15px) 55%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 36px; }
   input:focus, select:focus { border-color: var(--accent); }
   .invalid { border-color: var(--danger) !important; }
   .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .row3 { display: grid; grid-template-columns: 1.4fr .8fr 1.3fr; gap: 10px; }
-  .choice { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-  .choice button { padding: 14px; border-radius: var(--radius); border: 1.5px solid var(--bg2); background: var(--bg2);
-                   color: var(--text); font-size: 15px; font-weight: 600; }
-  .choice button.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips button { padding: 9px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--bg);
+                  color: var(--text); font-size: 14.5px; font-family: inherit; }
+  .chips button.sel { border-color: var(--accent); background: var(--accent); color: var(--accent-text); }
+  .chips.invalid { border: 0 !important; } .chips.invalid button { border-color: var(--danger); }
+  .cards { display: grid; gap: 10px; }
+  .cards button { text-align: left; padding: 14px 16px; border-radius: var(--radius); border: 1.5px solid var(--bg2);
+                  background: var(--bg2); color: var(--text); font-size: 15.5px; font-weight: 600; font-family: inherit; }
+  .cards button small { display: block; font-weight: 400; color: var(--hint); font-size: 13px; margin-top: 2px; }
+  .cards button.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+  .cards.invalid button { border-color: var(--danger); }
+  .inline { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 8px; color: var(--hint); }
+  .inline input { width: 18px; height: 18px; appearance: auto; -webkit-appearance: checkbox; margin: 0; }
+  .note { background: var(--bg2); border-radius: var(--radius); padding: 12px 14px; font-size: 14px; color: var(--hint); margin-bottom: 14px; }
+  .sub { margin: 18px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: var(--hint); font-weight: 700; }
   .card { background: var(--bg2); border-radius: var(--radius); padding: 4px 14px; margin-bottom: 14px; }
-  .card div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid color-mix(in srgb, var(--hint) 20%, transparent); font-size: 14.5px; }
+  .card div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
   .card div:last-child { border-bottom: 0; }
-  .card dt { color: var(--hint); } .card dd { margin: 0; text-align: right; font-weight: 600; }
-  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+  .card dt { color: var(--hint); flex: none; } .card dd { margin: 0; text-align: right; font-weight: 600; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; font-weight: 400; }
   .check input { width: 20px; height: 20px; flex: none; margin-top: 2px; appearance: auto; -webkit-appearance: checkbox; }
   .error { color: var(--danger); font-size: 14px; min-height: 20px; margin-top: 8px; }
   .center { text-align: center; padding: 48px 12px; }
   .center .icon { font-size: 56px; }
   .center h2 { margin: 12px 0 6px; } .center p { color: var(--hint); margin: 0; }
-  .fallback { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px; background: var(--bg); display: none; gap: 10px; }
-  .fallback button { flex: 1; padding: 14px; border: 0; border-radius: var(--radius); font-size: 16px; font-weight: 600; background: var(--accent); color: var(--accent-text); }
+  .fallback { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 16px; background: var(--bg); display: none; gap: 10px; border-top: 1px solid var(--line); }
+  .fallback button { flex: 1; padding: 14px; border: 0; border-radius: var(--radius); font-size: 16px; font-weight: 600; background: var(--accent); color: var(--accent-text); font-family: inherit; }
   .fallback button.sec { background: var(--bg2); color: var(--text); flex: .5; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div id="screen-loading" class="center"><div class="icon">⏳</div><p>በመጫን ላይ...</p></div>
+  <div id="screen-loading" class="center"><div class="icon">🚖</div><p>በመጫን ላይ...</p></div>
 
   <div id="screen-message" class="center" hidden>
     <div class="icon" id="msg-icon"></div><h2 id="msg-title"></h2><p id="msg-text"></p>
   </div>
 
   <form id="form" hidden novalidate>
-    <header>
-      <div class="steps"><span></span><span></span><span></span><span></span></div>
-      <div class="kicker" id="kicker"></div>
-      <h1 id="title"></h1>
-    </header>
+    <div class="brand">🚖 __BRAND__ DRIVER</div>
+    <div class="steps"></div>
+    <div class="kicker" id="kicker"></div>
+    <h1 id="title"></h1>
+    <p class="lead" id="lead"></p>
 
-    <section data-title="የግል መረጃ">
+    <section data-title="የግል መረጃ" data-lead="ደንበኞች እና ቡድናችን እርስዎን የሚያውቁበት መረጃ።">
       <div class="field"><label for="full_name">ሙሉ ስም</label>
-        <input id="full_name" autocomplete="name" placeholder="ስም፣ የአባት ስም፣ የአያት ስም"></div>
+        <input id="full_name" autocomplete="name" placeholder="ስም፣ የአባት ስም፣ የአያት ስም">
+        <div class="help">በመታወቂያዎ ላይ እንዳለው ይጻፉ።</div></div>
       <div class="field"><label for="phone">ስልክ ቁጥር</label>
         <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="09XXXXXXXX">
-        <div class="help">ደንበኞች እና ቡድናችን የሚያገኙዎት በዚህ ቁጥር ነው።</div></div>
-      <div class="field"><label for="sub_city">የሚኖሩበት ክፍለ ከተማ</label>
-        <select id="sub_city" data-opts="SUB_CITIES"></select></div>
+        <label class="inline"><input type="checkbox" id="telebirr_same" checked> ይህ ቁጥር Telebirr አለው (ክፍያዎ የሚገባበት)</label></div>
+      <div class="field" id="telebirr_field" hidden><label for="telebirr">የTelebirr ቁጥር</label>
+        <input id="telebirr" type="tel" inputmode="tel" placeholder="09XXXXXXXX"></div>
+      <div class="row">
+        <div class="field"><label for="dob">የትውልድ ቀን</label><input id="dob" type="date"></div>
+        <div class="field"><label for="sub_city">ክፍለ ከተማ</label><select id="sub_city" data-opts="SUB_CITIES"></select></div>
+      </div>
+      <div class="field"><span class="label">የሚናገሯቸው ቋንቋዎች</span><div class="chips" id="languages" data-opts="LANGUAGES" data-multi></div></div>
+      <div class="sub">የአደጋ ጊዜ ተጠሪ</div>
+      <div class="row">
+        <div class="field"><label for="emergency_name">ስም</label><input id="emergency_name" placeholder="ለምሳሌ ወንድሜ"></div>
+        <div class="field"><label for="emergency_phone">ስልክ</label><input id="emergency_phone" type="tel" inputmode="tel" placeholder="09XXXXXXXX"></div>
+      </div>
     </section>
 
-    <section data-title="መንጃ ፈቃድ">
+    <section data-title="መንጃ ፈቃድ እና ልምድ" data-lead="ለተግባር ፈተና ዋናውን መንጃ ፈቃድ ይዘው መምጣት ይኖርብዎታል።">
       <div class="field"><label for="license_no">የመንጃ ፈቃድ ቁጥር</label>
         <input id="license_no" autocapitalize="characters" placeholder="ለምሳሌ AA123456"></div>
-      <div class="field"><label for="license_grade">ደረጃ</label>
-        <select id="license_grade" data-opts="LICENSE_GRADES"></select></div>
-      <div class="field"><label for="license_expiry">የሚያበቃበት ቀን (እ.ኤ.አ.)</label>
-        <input id="license_expiry" type="date"></div>
+      <div class="row">
+        <div class="field"><label for="license_grade">ደረጃ</label><select id="license_grade" data-opts="LICENSE_GRADES"></select></div>
+        <div class="field"><label for="license_expiry">የሚያበቃበት (እ.ኤ.አ.)</label><input id="license_expiry" type="date"></div>
+      </div>
+      <div class="field"><span class="label">የማሽከርከር ልምድ</span><div class="chips" id="experience" data-opts="EXPERIENCE"></div></div>
+      <div class="field"><span class="label">ከዚህ በፊት የሰሩበት ride-hailing</span><div class="chips" id="prev_platforms" data-opts="PREV_PLATFORMS" data-multi data-exclusive="የለም"></div></div>
     </section>
 
-    <section data-title="ተሽከርካሪ">
-      <label>የራስዎ ተሽከርካሪ አለዎት?</label>
-      <div class="choice" id="has_vehicle">
-        <button type="button" data-v="yes">🚗 አዎ፣ አለኝ</button>
-        <button type="button" data-v="no">🙋 የለኝም</button>
-      </div>
+    <section data-title="መኪና" data-lead="የራስዎ መኪና ባይኖርዎትም ማመልከት ይችላሉ።">
+      <div class="field"><div class="cards" id="vehicle_mode"></div></div>
       <div id="vehicle-fields" hidden>
         <div class="row">
           <div class="field"><label for="vehicle_type">ዓይነት</label><select id="vehicle_type" data-opts="VEHICLE_TYPES"></select></div>
@@ -109,19 +132,42 @@
           <div class="field"><label for="vehicle_model">ሞዴል</label><input id="vehicle_model" placeholder="Toyota Vitz"></div>
           <div class="field"><label for="vehicle_color">ቀለም</label><input id="vehicle_color" placeholder="ነጭ"></div>
         </div>
+        <div class="row">
+          <div class="field"><span class="label">የተሳፋሪ መቀመጫ</span><div class="chips" id="vehicle_seats" data-opts="SEATS"></div></div>
+          <div class="field"><span class="label">AC</span><div class="chips" id="vehicle_ac" data-opts="AC"></div></div>
+        </div>
         <label>የሰሌዳ ቁጥር</label>
         <div class="row3">
           <div class="field"><select id="plate_region" data-opts="PLATE_REGIONS" aria-label="ክልል"></select></div>
           <div class="field"><input id="plate_code" inputmode="numeric" maxlength="2" placeholder="ኮድ" aria-label="ኮድ"></div>
           <div class="field"><input id="plate_number" autocapitalize="characters" maxlength="8" placeholder="A12345" aria-label="ቁጥር"></div>
         </div>
+        <div id="owner-fields" hidden>
+          <div class="sub">የመኪናው ባለቤት</div>
+          <div class="row">
+            <div class="field"><label for="owner_name">ስም</label><input id="owner_name"></div>
+            <div class="field"><label for="owner_phone">ስልክ</label><input id="owner_phone" type="tel" inputmode="tel" placeholder="09XXXXXXXX"></div>
+          </div>
+          <div class="help">የባለቤቱን የውክልና ወይም የፈቃድ ደብዳቤ ፎቶ በኋላ ይጠየቃሉ።</div>
+        </div>
       </div>
+      <div class="note" id="no-car-note" hidden>👍 መኪና ለሌላቸው አሽከርካሪዎች __BRAND__ መኪና ሲኖር ያገናኝዎታል።</div>
     </section>
 
-    <section data-title="ያረጋግጡ እና ይላኩ">
+    <section data-title="አገልግሎት እና የስራ ሰዓት" data-lead="ከ__BRAND__ ጋር እንዴት መስራት ይፈልጋሉ?">
+      <div class="field"><span class="label">የሚፈልጉት አገልግሎት</span><div class="chips" id="services" data-opts="SERVICES" data-multi></div>
+        <div class="help">ሁለቱንም መምረጥ ይችላሉ።</div></div>
+      <div class="field"><span class="label">የሚመርጡት የስራ ሰዓት</span><div class="chips" id="shift" data-opts="SHIFTS"></div></div>
+      <div class="field"><span class="label">ስልክዎ</span><div class="chips" id="phone_type" data-opts="PHONE_TYPES"></div>
+        <div class="help">የ__BRAND__ Driver መተግበሪያ ለመጠቀም ስማርት ስልክ ያስፈልጋል።</div></div>
+      <div class="field"><label for="referral">የጠቆመዎ ሰው ስልክ ወይም ኮድ <span class="opt">(አማራጭ)</span></label>
+        <input id="referral" placeholder="ለምሳሌ CB1001 ወይም 09XXXXXXXX"></div>
+    </section>
+
+    <section data-title="ያረጋግጡ እና ይላኩ" data-lead="ከመላክዎ በፊት መረጃዎን ይመልከቱ። ለማስተካከል ተመለስ ይበሉ።">
       <dl class="card" id="review"></dl>
       <label class="check"><input type="checkbox" id="consent">
-        <span>ያስገባሁት መረጃ ትክክል መሆኑን አረጋግጣለሁ፤ መረጃዬ ለምዝገባ ዓላማ እንዲውልም እስማማለሁ።</span></label>
+        <span>ያስገባሁት መረጃ ትክክል መሆኑን አረጋግጣለሁ፤ __BRAND__ መረጃዬን ለምዝገባ እና ለማረጋገጫ ዓላማ እንዲጠቀም እስማማለሁ።</span></label>
     </section>
 
     <div class="error" id="error"></div>
@@ -132,96 +178,169 @@
 <script>
 (function () {
   "use strict";
-  var OPTIONS = __OPTIONS__;
+  var O = __OPTIONS__;
+  O.AC = ["አለው", "የለውም"];
   var tg = window.Telegram && window.Telegram.WebApp;
   var $ = function (id) { return document.getElementById(id); };
-  var sections = [].slice.call(document.querySelectorAll("section"));
-  var step = 0, hasVehicle = null, busy = false;
-  var useMain = !!(tg && tg.MainButton && tg.platform !== "unknown");
+  var $$ = function (sel) { return [].slice.call(document.querySelectorAll(sel)); };
+  var sections = $$("section");
+  var step = 0, busy = false, state = { vehicle_mode: null };
+  var useMain = !!(tg && tg.MainButton && tg.platform && tg.platform !== "unknown");
+  var TODAY = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
+  var PHONE_RE = /^(\+?251|0)?[79]\d{8}$/;
+  var phoneOk = function (v) { return PHONE_RE.test(String(v || "").replace(/[\s\-()]/g, "")); };
 
-  function show(id) {
-    ["screen-loading", "screen-message", "form"].forEach(function (s) { $(s).hidden = s !== id; });
-  }
+  function show(id) { ["screen-loading", "screen-message", "form"].forEach(function (s) { $(s).hidden = s !== id; }); }
   function message(icon, title, text) {
     $("msg-icon").textContent = icon; $("msg-title").textContent = title; $("msg-text").textContent = text;
     show("screen-message"); setButtons(null);
   }
+  function haptic(kind) {
+    try { if (kind === "sel") tg.HapticFeedback.selectionChanged(); else tg.HapticFeedback.notificationOccurred(kind); } catch (e) {}
+  }
 
-  // ምርጫዎችን መሙላት
-  [].forEach.call(document.querySelectorAll("select[data-opts]"), function (sel) {
+  // ---- ምርጫዎች ----
+  sections.forEach(function () { $$(".steps")[0].appendChild(document.createElement("span")); });
+
+  $$("select[data-opts]").forEach(function (sel) {
     var first = document.createElement("option");
     first.value = ""; first.textContent = sel.getAttribute("aria-label") || "— ይምረጡ —";
     sel.appendChild(first);
-    OPTIONS[sel.dataset.opts].forEach(function (v) {
-      var o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o);
+    O[sel.dataset.opts].forEach(function (v) { var o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o); });
+  });
+
+  $$(".chips").forEach(function (box) {
+    var multi = box.hasAttribute("data-multi"), excl = box.dataset.exclusive;
+    state[box.id] = multi ? [] : null;
+    O[box.dataset.opts].forEach(function (v) {
+      var b = document.createElement("button"); b.type = "button"; b.textContent = v; b.dataset.v = v;
+      b.addEventListener("click", function () {
+        if (multi) {
+          var cur = state[box.id], i = cur.indexOf(v);
+          if (i >= 0) cur.splice(i, 1); else {
+            if (excl && v === excl) cur.length = 0;
+            else if (excl) { var j = cur.indexOf(excl); if (j >= 0) cur.splice(j, 1); }
+            cur.push(v);
+          }
+        } else state[box.id] = v;
+        paintChips(box); box.classList.remove("invalid"); haptic("sel");
+      });
+      box.appendChild(b);
     });
   });
-  $("license_expiry").min = new Date().toISOString().slice(0, 10);
+  function paintChips(box) {
+    var v = state[box.id];
+    [].forEach.call(box.children, function (b) { b.classList.toggle("sel", Array.isArray(v) ? v.indexOf(b.dataset.v) >= 0 : v === b.dataset.v); });
+  }
 
-  [].forEach.call(document.querySelectorAll("#has_vehicle button"), function (b) {
-    b.addEventListener("click", function () { setVehicle(b.dataset.v === "yes"); haptic("selection"); });
+  var MODE_HINT = { own: "ሊብሬ፣ መድን እና ቦሎ ይጠየቃሉ", other: "የባለቤቱ ፈቃድ ደብዳቤም ይጠየቃል", none: "የኩባንያ መኪና ሲኖር እንመድብልዎታለን" };
+  Object.keys(O.VEHICLE_MODES).forEach(function (k) {
+    var b = document.createElement("button"); b.type = "button"; b.dataset.v = k;
+    b.textContent = O.VEHICLE_MODES[k];
+    var s = document.createElement("small"); s.textContent = MODE_HINT[k]; b.appendChild(s);
+    b.addEventListener("click", function () { setMode(k); haptic("sel"); });
+    $("vehicle_mode").appendChild(b);
   });
-  function setVehicle(v) {
-    hasVehicle = v;
-    [].forEach.call(document.querySelectorAll("#has_vehicle button"), function (b) {
-      b.classList.toggle("sel", (b.dataset.v === "yes") === v);
-    });
-    $("vehicle-fields").hidden = !v;
+  function setMode(k) {
+    state.vehicle_mode = k;
+    $$("#vehicle_mode button").forEach(function (b) { b.classList.toggle("sel", b.dataset.v === k); });
+    $("vehicle_mode").classList.remove("invalid");
+    $("vehicle-fields").hidden = k === "none";
+    $("owner-fields").hidden = k !== "other";
+    $("no-car-note").hidden = k !== "none";
   }
 
-  function haptic(kind) {
-    try {
-      if (!tg || !tg.HapticFeedback) return;
-      if (kind === "selection") tg.HapticFeedback.selectionChanged();
-      else tg.HapticFeedback.notificationOccurred(kind);
-    } catch (e) {}
-  }
+  $("telebirr_same").addEventListener("change", function () { $("telebirr_field").hidden = this.checked; });
+  var maxDob = new Date(); maxDob.setFullYear(maxDob.getFullYear() - O.MIN_AGE);
+  $("dob").max = maxDob.toISOString().slice(0, 10); $("dob").min = "1950-01-01";
+  $("license_expiry").min = TODAY;
 
-  var STEP_FIELDS = [
-    ["full_name", "phone", "sub_city"],
-    ["license_no", "license_grade", "license_expiry"],
-    [], []
-  ];
-  var VEHICLE_FIELDS = ["vehicle_type", "vehicle_year", "vehicle_model", "vehicle_color", "plate_region", "plate_code", "plate_number"];
-
+  // ---- ማረጋገጫ ----
   function val(id) { return ($(id).value || "").trim(); }
+  function bad(id, cond) { $(id).classList.toggle("invalid", !!cond); return !!cond; }
+  function age(dob) {
+    var a = dob.split("-").map(Number), t = TODAY.split("-").map(Number);
+    return t[0] - a[0] - ((t[1] < a[1] || (t[1] === a[1] && t[2] < a[2])) ? 1 : 0);
+  }
 
   function validateStep() {
-    var fields = STEP_FIELDS[step].slice(), err = "";
-    if (step === 2) {
-      if (hasVehicle === null) return "ተሽከርካሪ እንዳለዎት ይምረጡ።";
-      if (hasVehicle) fields = VEHICLE_FIELDS;
-    }
-    if (step === 3 && !$("consent").checked) return "ለመቀጠል መረጃው ትክክል መሆኑን ያረጋግጡ።";
-    fields.forEach(function (f) {
-      var bad = !val(f);
-      if (f === "full_name" && val(f).split(/\s+/).length < 2) bad = true;
-      if (f === "phone" && !/^(\+?251|0)?[79]\d{8}$/.test(val(f).replace(/[\s\-()]/g, ""))) bad = true;
-      if (f === "license_expiry" && val(f) && val(f) < new Date().toISOString().slice(0, 10)) { bad = true; err = err || "መንጃ ፈቃድዎ ጊዜው አልፎበታል።"; }
-      $(f).classList.toggle("invalid", bad);
-      if (bad && !err) err = f === "full_name" ? "ሙሉ ስምዎን ያስገቡ (ቢያንስ ስም እና የአባት ስም)።"
-                         : f === "phone" ? "ትክክለኛ ስልክ ቁጥር ያስገቡ (ለምሳሌ 0911234567)።"
-                         : "እባክዎ ሁሉንም መስኮች ይሙሉ።";
-    });
-    return err;
+    var e = [];
+    function req(id, msg, cond) { if (bad(id, cond === undefined ? !val(id) : cond)) e.push(msg); }
+    function chip(id, msg) { var v = state[id]; var empty = Array.isArray(v) ? !v.length : !v; $(id).classList.toggle("invalid", empty); if (empty) e.push(msg); }
+    if (step === 0) {
+      req("full_name", "ሙሉ ስምዎን ያስገቡ (ቢያንስ ስም እና የአባት ስም)።", val("full_name").split(/\s+/).length < 2);
+      req("phone", "ትክክለኛ ስልክ ቁጥር ያስገቡ (ለምሳሌ 0911234567)።", !phoneOk(val("phone")));
+      if (!$("telebirr_same").checked) req("telebirr", "ትክክለኛ የTelebirr ቁጥር ያስገቡ።", !phoneOk(val("telebirr")));
+      req("dob", "ለ__BRAND__ አሽከርካሪነት ዕድሜዎ ቢያንስ " + O.MIN_AGE + " መሆን አለበት።", !val("dob") || age(val("dob")) < O.MIN_AGE);
+      req("sub_city", "ክፍለ ከተማ ይምረጡ።");
+      chip("languages", "የሚናገሯቸውን ቋንቋዎች ይምረጡ።");
+      req("emergency_name", "የአደጋ ጊዜ ተጠሪ ስም ያስገቡ።", val("emergency_name").length < 2);
+      req("emergency_phone", "የአደጋ ጊዜ ተጠሪ ስልክ ያስገቡ (ከራስዎ የተለየ)።", !phoneOk(val("emergency_phone")) || val("emergency_phone").replace(/\D/g, "").slice(-9) === val("phone").replace(/\D/g, "").slice(-9));
+    } else if (step === 1) {
+      req("license_no", "የመንጃ ፈቃድ ቁጥር ያስገቡ።", !/^[A-Za-z0-9\-\/]{4,30}$/.test(val("license_no")));
+      req("license_grade", "የመንጃ ፈቃድ ደረጃ ይምረጡ።");
+      req("license_expiry", "መንጃ ፈቃድዎ ጊዜው አልፎበታል ወይም ቀኑ አልገባም።", !val("license_expiry") || val("license_expiry") < TODAY);
+      chip("experience", "የማሽከርከር ልምድዎን ይምረጡ።");
+      chip("prev_platforms", "ከዚህ በፊት የሰሩበትን ይምረጡ (ካልሰሩ \"የለም\")።");
+    } else if (step === 2) {
+      if (!state.vehicle_mode) { $("vehicle_mode").classList.add("invalid"); e.push("የመኪና ሁኔታዎን ይምረጡ።"); }
+      else if (state.vehicle_mode !== "none") {
+        req("vehicle_type", "የመኪና ዓይነት ይምረጡ።");
+        var y = parseInt(val("vehicle_year"), 10);
+        req("vehicle_year", "የተመረተበት ዓመት (እ.ኤ.አ.) ከ" + O.MIN_VEHICLE_YEAR + " በኋላ መሆን አለበት።", !(y >= O.MIN_VEHICLE_YEAR && y <= new Date().getFullYear() + 1));
+        req("vehicle_model", "የመኪናውን ሞዴል ያስገቡ።", val("vehicle_model").length < 2);
+        req("vehicle_color", "የመኪናውን ቀለም ያስገቡ።", val("vehicle_color").length < 2);
+        chip("vehicle_seats", "የመቀመጫ ብዛት ይምረጡ።");
+        chip("vehicle_ac", "መኪናው AC እንዳለው ይምረጡ።");
+        req("plate_region", "የሰሌዳ ክልል ይምረጡ።");
+        req("plate_code", "የሰሌዳ ኮድ ያስገቡ።", !/^\d{1,2}$/.test(val("plate_code")));
+        req("plate_number", "ትክክለኛ የሰሌዳ ቁጥር ያስገቡ (ለምሳሌ A12345)።", !/^[A-Za-z]{0,2}\d{3,6}$/.test(val("plate_number").replace(/\s/g, "")));
+        if (state.vehicle_mode === "other") {
+          req("owner_name", "የባለቤቱን ስም ያስገቡ።", val("owner_name").length < 2);
+          req("owner_phone", "የባለቤቱን ስልክ ያስገቡ።", !phoneOk(val("owner_phone")));
+        }
+      }
+    } else if (step === 3) {
+      chip("services", "ቢያንስ አንድ አገልግሎት ይምረጡ።");
+      chip("shift", "የስራ ሰዓት ይምረጡ።");
+      chip("phone_type", "የስልክዎን ዓይነት ይምረጡ።");
+    } else if (step === 4 && !$("consent").checked) e.push("ለመላክ መረጃው ትክክል መሆኑን ያረጋግጡ።");
+    return e[0] || "";
   }
 
+  var TEXT = ["full_name", "phone", "dob", "sub_city", "emergency_name", "emergency_phone", "license_no", "license_grade", "license_expiry", "referral"];
+  var CAR = ["vehicle_type", "vehicle_year", "vehicle_model", "vehicle_color", "plate_region", "plate_code", "plate_number"];
+
   function profile() {
-    var p = { has_vehicle: hasVehicle ? "yes" : "no" };
-    STEP_FIELDS[0].concat(STEP_FIELDS[1]).forEach(function (f) { p[f] = val(f); });
-    if (hasVehicle) VEHICLE_FIELDS.forEach(function (f) { p[f] = val(f); });
+    var p = {};
+    TEXT.forEach(function (f) { p[f] = val(f); });
+    p.telebirr = $("telebirr_same").checked ? p.phone : val("telebirr");
+    ["languages", "experience", "prev_platforms", "services", "shift", "phone_type"].forEach(function (f) { p[f] = state[f]; });
+    p.vehicle_mode = state.vehicle_mode;
+    if (state.vehicle_mode && state.vehicle_mode !== "none") {
+      CAR.forEach(function (f) { p[f] = val(f); });
+      p.vehicle_seats = state.vehicle_seats; p.vehicle_ac = state.vehicle_ac === "አለው" ? "yes" : "no";
+      if (state.vehicle_mode === "other") { p.owner_name = val("owner_name"); p.owner_phone = val("owner_phone"); }
+    }
     return p;
   }
 
   function buildReview() {
-    var p = profile(), rows = [
-      ["ስም", p.full_name], ["ስልክ", p.phone], ["ክፍለ ከተማ", p.sub_city],
-      ["መንጃ ፈቃድ", p.license_no + " · " + p.license_grade], ["የሚያበቃበት", p.license_expiry]
+    var p = profile(), j = function (a) { return (a || []).join("፣ "); };
+    var rows = [
+      ["ስም", p.full_name], ["ስልክ", p.phone], ["Telebirr", p.telebirr], ["የትውልድ ቀን", p.dob + " (" + age(p.dob) + " ዓመት)"],
+      ["ክፍለ ከተማ", p.sub_city], ["ቋንቋ", j(p.languages)], ["የአደጋ ጊዜ ተጠሪ", p.emergency_name + " · " + p.emergency_phone],
+      ["መንጃ ፈቃድ", p.license_no.toUpperCase() + " · " + p.license_grade], ["የሚያበቃበት", p.license_expiry],
+      ["ልምድ", p.experience], ["ቀድሞ የሰሩበት", j(p.prev_platforms)], ["መኪና", O.VEHICLE_MODES[p.vehicle_mode]]
     ];
-    if (hasVehicle) rows.push(
-      ["ተሽከርካሪ", p.vehicle_model + " (" + p.vehicle_type + ", " + p.vehicle_year + ")"],
-      ["ቀለም", p.vehicle_color], ["ሰሌዳ", p.plate_region + " · " + p.plate_code + " · " + p.plate_number.toUpperCase()]
-    ); else rows.push(["ተሽከርካሪ", "የለኝም"]);
+    if (p.vehicle_mode !== "none") rows.push(
+      ["ሞዴል", p.vehicle_model + " (" + p.vehicle_type + ", " + p.vehicle_year + ", " + p.vehicle_color + ")"],
+      ["መቀመጫ / AC", p.vehicle_seats + " · AC " + (p.vehicle_ac === "yes" ? "አለው" : "የለውም")],
+      ["ሰሌዳ", p.plate_region + " · " + p.plate_code + " · " + p.plate_number.toUpperCase()]
+    );
+    if (p.vehicle_mode === "other") rows.push(["ባለቤት", p.owner_name + " · " + p.owner_phone]);
+    rows.push(["አገልግሎት", j(p.services)], ["የስራ ሰዓት", p.shift], ["ስልክ", p.phone_type]);
+    if (p.referral) rows.push(["የጠቆመው", p.referral]);
     var dl = $("review"); dl.innerHTML = "";
     rows.forEach(function (r) {
       var d = document.createElement("div"), dt = document.createElement("dt"), dd = document.createElement("dd");
@@ -229,17 +348,18 @@
     });
   }
 
+  // ---- ደረጃዎች ----
   function render() {
     sections.forEach(function (s, i) { s.classList.toggle("active", i === step); });
-    [].forEach.call(document.querySelectorAll(".steps span"), function (s, i) { s.classList.toggle("on", i <= step); });
+    $$(".steps span").forEach(function (s, i) { s.classList.toggle("on", i <= step); });
     $("kicker").textContent = "ደረጃ " + (step + 1) + " ከ " + sections.length;
     $("title").textContent = sections[step].dataset.title;
+    $("lead").textContent = sections[step].dataset.lead || "";
     $("error").textContent = "";
-    if (step === 3) buildReview();
-    setButtons(step === 3 ? "ምዝገባ ላክ" : "ቀጣይ");
+    if (step === sections.length - 1) buildReview();
+    setButtons(step === sections.length - 1 ? "ማመልከቻ ላክ" : "ቀጣይ");
     window.scrollTo(0, 0);
   }
-
   function setButtons(text) {
     if (useMain) {
       if (text) { tg.MainButton.setText(text); tg.MainButton.show(); } else tg.MainButton.hide();
@@ -250,11 +370,10 @@
       $("fb-back").style.display = step > 0 ? "" : "none";
     }
   }
-
   function next() {
     if (busy) return;
     var err = validateStep();
-    if (err) { $("error").textContent = err; haptic("error"); return; }
+    if (err) { $("error").textContent = err; haptic("error"); var f = document.querySelector("section.active .invalid"); if (f && f.scrollIntoView) f.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
     if (step < sections.length - 1) { step++; render(); return; }
     submit();
   }
@@ -272,8 +391,9 @@
     api("/api/register", { profile: profile() }).then(function (res) {
       if (!res.ok) throw new Error(res.error || "ስህተት አጋጥሟል");
       haptic("success");
-      message("✅", "ቅጹ በተሳካ ሁኔታ ተልኳል!", "አሁን ወደ ቻቱ ይመለሱ እና የተጠየቁትን ሰነዶች ፎቶ ይላኩ።");
-      setTimeout(function () { if (tg) tg.close(); }, 2200);
+      try { tg.disableClosingConfirmation(); } catch (e) {}
+      message("✅", "ቅጹ በተሳካ ሁኔታ ተልኳል!", "አሁን ወደ ቻቱ ይመለሱ እና የተጠየቁትን ሰነዶች ፎቶ አንድ በአንድ ይላኩ።");
+      setTimeout(function () { if (tg) tg.close(); }, 2500);
     }).catch(function (e) {
       $("error").textContent = e.message || "የኢንተርኔት ችግር አጋጥሟል፤ እንደገና ይሞክሩ።"; haptic("error");
     }).then(function () {
@@ -283,32 +403,46 @@
   }
 
   function prefill(d, user) {
-    if (d) {
-      Object.keys(d).forEach(function (k) { if ($(k) && d[k] != null && k !== "has_vehicle") $(k).value = d[k]; });
-      setVehicle(!!d.has_vehicle);
-    } else if (user) {
-      $("full_name").value = [user.first_name, user.last_name].filter(Boolean).join(" ");
+    if (!d) {
+      if (user) $("full_name").value = [user.first_name, user.last_name].filter(Boolean).join(" ");
+      return;
     }
+    TEXT.concat(CAR, ["owner_name", "owner_phone", "telebirr"]).forEach(function (k) {
+      if (d[k] != null && $(k)) $(k).value = String(d[k]).replace(/^\+251/, "0");
+    });
+    $("telebirr_same").checked = !d.telebirr || d.telebirr === d.phone;
+    $("telebirr_field").hidden = $("telebirr_same").checked;
+    ["languages", "prev_platforms", "services"].forEach(function (k) { if (d[k]) state[k] = d[k].slice(); });
+    ["experience", "shift", "phone_type", "vehicle_seats"].forEach(function (k) { if (d[k]) state[k] = d[k]; });
+    if (d.vehicle_ac != null) state.vehicle_ac = d.vehicle_ac ? "አለው" : "የለውም";
+    $$(".chips").forEach(paintChips);
+    if (d.vehicle_mode) setMode(d.vehicle_mode);
   }
 
-  // ጅምር
+  // ---- ጅምር ----
   if (useMain) { tg.MainButton.onClick(next); tg.BackButton.onClick(back); }
   $("fb-next").addEventListener("click", next);
   $("fb-back").addEventListener("click", back);
   $("form").addEventListener("submit", function (e) { e.preventDefault(); next(); });
 
   if (!tg || !tg.initData) {
-    message("📱", "ከTelegram ውስጥ ይክፈቱ", "ይህ ቅጽ የሚሰራው ከቦቱ ውስጥ ባለው \"ምዝገባ\" አዝራር ሲከፈት ብቻ ነው።");
+    message("📱", "ከTelegram ውስጥ ይክፈቱ", "ይህ ቅጽ የሚሰራው ከ__BRAND__ ቦት ውስጥ ባለው \"ምዝገባ\" አዝራር ሲከፈት ብቻ ነው።");
     return;
   }
   tg.ready(); tg.expand();
   try { tg.enableClosingConfirmation(); } catch (e) {}
 
+  var LOCKED = {
+    pending: ["⏳", "ማመልከቻዎ በግምገማ ላይ ነው", "ውሳኔው እንደደረሰ በቦቱ እናሳውቅዎታለን።"],
+    docs_ok: ["📅", "ሰነዶችዎ ጸድቀዋል", "የተግባር ፈተና ቀጠሮ በቅርቡ ይደርስዎታል።"],
+    test_scheduled: ["🚗", "የፈተና ቀጠሮ ተይዞልዎታል", "ዝርዝሩን በቦቱ /status ይመልከቱ።"],
+    active: ["🎉", "እርስዎ ገቢር አሽከርካሪ ነዎት", "ተጨማሪ ምዝገባ አያስፈልግም።"],
+    suspended: ["⛔", "አካውንትዎ ታግዷል", "ለበለጠ መረጃ የድጋፍ ቡድናችንን ያግኙ።"]
+  };
   api("/api/me", {}).then(function (res) {
     if (res._status === 401) return message("🔒", "ማረጋገጥ አልተቻለም", res.error || "ቦቱን እንደገና ከፍተው ይሞክሩ።");
     var d = res.driver;
-    if (d && d.status === "pending") return message("⏳", "ማመልከቻዎ በግምገማ ላይ ነው", "ውሳኔው እንደደረሰ በቦቱ እናሳውቅዎታለን።");
-    if (d && d.status === "approved") return message("🎉", "ምዝገባዎ ጸድቋል", "ተጨማሪ ምዝገባ አያስፈልግም።");
+    if (d && LOCKED[d.status]) return message.apply(null, LOCKED[d.status]);
     prefill(d, res.user);
     show("form"); render();
     if (d && d.status === "rejected" && d.reject_reason) $("error").textContent = "ያለፈው ማመልከቻ ውድቅ የሆነበት ምክንያት፦ " + d.reject_reason;
