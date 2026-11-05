@@ -19,6 +19,8 @@ const COLUMNS = {
   referral_rewarded_at: "TEXT", referral_paid_at: "TEXT",
   agreement_version: "INTEGER", agreement_accepted_at: "TEXT",
   fix_state: "TEXT", fix_docs: "TEXT", fix_note: "TEXT", fix_submitted_at: "TEXT", appeal_text: "TEXT",
+  agent_id: "INTEGER", campaign_id: "INTEGER", commission_amount: "INTEGER", commission_paid_at: "TEXT",
+  telegram_linked_at: "TEXT", appt_reminded_at: "TEXT",
   reminder_count: "INTEGER DEFAULT 0", last_reminded_at: "TEXT",
   // የቀድሞ ስሪት (v2) አምዶች — ለማሻሻያ ብቻ
   test_at: "TEXT", test_confirmed: "INTEGER DEFAULT 0",
@@ -48,6 +50,15 @@ export async function ensureSchema(db) {
       type TEXT NOT NULL, detail TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
     db.prepare(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS staff (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, phone TEXT,
+      telebirr TEXT, role TEXT NOT NULL DEFAULT 'agent', tg_id INTEGER, username TEXT, active INTEGER NOT NULL DEFAULT 1, invite_token TEXT,
+      collecting_for INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS campaigns (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, location TEXT,
+      start_date TEXT, end_date TEXT, commission INTEGER, active INTEGER NOT NULL DEFAULT 1, created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS campaign_agents (campaign_id INTEGER NOT NULL, staff_id INTEGER NOT NULL, PRIMARY KEY (campaign_id, staff_id))`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS sms_log (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT, tg_id INTEGER, kind TEXT, text TEXT,
+      status TEXT, error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
   ]);
 
   const { results } = await db.prepare("PRAGMA table_info(drivers)").all();
@@ -62,7 +73,15 @@ export async function ensureSchema(db) {
     db.prepare("CREATE INDEX IF NOT EXISTS idx_drivers_phone ON drivers(phone)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_drivers_referrer ON drivers(referrer_id)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_events_tg ON events(tg_id, id)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_drivers_agent ON drivers(agent_id)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_staff_tg ON staff(tg_id)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_sms_month ON sms_log(created_at)"),
   ]);
+
+  const pr = new Set((await db.prepare("PRAGMA table_info(prefs)").all()).results.map((r) => r.name));
+  const prefCols = { agent_code: "TEXT", campaign_id: "INTEGER", link_state: "TEXT", otp_phone: "TEXT", otp_hash: "TEXT", otp_expires: "INTEGER", otp_tries: "INTEGER DEFAULT 0" };
+  const addPref = Object.entries(prefCols).filter(([k]) => !pr.has(k)).map(([k, t]) => db.prepare(`ALTER TABLE prefs ADD COLUMN ${k} ${t}`));
+  if (addPref.length) await db.batch(addPref);
 
   const v = await db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").first();
   if (Number(v?.value ?? 0) < SCHEMA_VERSION) await migrateValues(db);
@@ -162,7 +181,7 @@ export async function transition(db, id, to, { from, by = null, reason = null, a
   if (to === "rejected" || to === "suspended") sets.push("reject_reason = ?"), vals.push(reason);
   if (to === "pending") sets.push("submitted_at = datetime('now')");
   if (to === "awaiting_docs") sets.push("reminder_count = 0");
-  if (appt !== undefined) sets.push("appt_text = ?", "appt_at = ?", "appt_confirmed = 0"), vals.push(appt?.text ?? null, appt?.at ?? null);
+  if (appt !== undefined) sets.push("appt_text = ?", "appt_at = ?", "appt_confirmed = 0", "appt_reminded_at = NULL"), vals.push(appt?.text ?? null, appt?.at ?? null);
   if (to === "active") {
     sets.push("activated_at = COALESCE(activated_at, datetime('now'))",
       "driver_no = COALESCE(driver_no, (SELECT COALESCE(MAX(driver_no), 1000) + 1 FROM drivers))");
@@ -234,7 +253,7 @@ export async function listByStatus(db, statuses, limit = 20) {
   return results;
 }
 
-export async function searchDrivers(db, { q, status, service, mode, fuel, sort = "recent", limit = 50, offset = 0 } = {}) {
+export async function searchDrivers(db, { q, status, service, mode, fuel, agent, campaign, sort = "recent", limit = 50, offset = 0 } = {}) {
   const where = [], vals = [];
   if (q) {
     const like = `%${q.trim()}%`;
@@ -245,6 +264,8 @@ export async function searchDrivers(db, { q, status, service, mode, fuel, sort =
   if (status) where.push(`status IN (${status.split(",").map(() => "?").join(",")})`), vals.push(...status.split(","));
   if (service) where.push("(',' || services || ',') LIKE ?"), vals.push(`%,${service},%`);
   if (mode) where.push("vehicle_mode = ?"), vals.push(mode);
+  if (agent) where.push("agent_id = ?"), vals.push(Number(agent));
+  if (campaign) where.push("campaign_id = ?"), vals.push(Number(campaign));
   if (fuel === "green") where.push("fuel_type IN ('electric','hybrid')");
   else if (fuel) where.push("fuel_type = ?"), vals.push(fuel);
   const order = { recent: "updated_at DESC", oldest: "COALESCE(submitted_at, created_at) ASC", name: "full_name COLLATE NOCASE ASC", code: "driver_no DESC" }[sort] ?? "updated_at DESC";
@@ -335,3 +356,125 @@ export async function expiringLicenses(db, limit) {
 }
 export const markReminded = (db, id) =>
   db.prepare("UPDATE drivers SET reminder_count = reminder_count + 1, last_reminded_at = datetime('now') WHERE tg_id = ?").bind(id).run();
+
+// ---------- አሽከርካሪዎች ያለ Telegram (ሴልሱ የመዘገባቸው) ----------
+// ቋሚ ያልሆነ ID፦ ከ -900000000000000 በታች (የTelegram IDዎች አይደርሱበትም)
+
+export const NO_TG_BASE = -900000000000000;
+export const isNoTg = (id) => Number(id) <= NO_TG_BASE;
+
+export async function nextNoTgId(db) {
+  const r = await db.prepare("SELECT MIN(tg_id) AS m FROM drivers WHERE tg_id <= ?").bind(NO_TG_BASE).first();
+  return (r?.m ?? NO_TG_BASE) - 1;
+}
+
+export const setDriverFields = (db, id, f) => {
+  const keys = Object.keys(f);
+  return db.prepare(`UPDATE drivers SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE tg_id = ?`).bind(...keys.map((k) => f[k]), id).run();
+};
+
+export const findNoTgByPhone = (db, phone) =>
+  db.prepare("SELECT * FROM drivers WHERE phone = ? AND tg_id <= ?").bind(phone, NO_TG_BASE).first();
+
+/** ሴልሱ የመዘገበው አሽከርካሪ Telegram ሲከፍት ሁሉንም መረጃ ወደ እውነተኛው ID ማዛወር */
+export async function linkTelegram(db, fromId, toId, username) {
+  await db.batch([
+    db.prepare("UPDATE drivers SET tg_id = ?, username = ?, telegram_linked_at = datetime('now') WHERE tg_id = ?").bind(toId, username ?? null, fromId),
+    db.prepare("UPDATE documents SET tg_id = ? WHERE tg_id = ?").bind(toId, fromId),
+    db.prepare("UPDATE events SET tg_id = ? WHERE tg_id = ?").bind(toId, fromId),
+    db.prepare("UPDATE drivers SET referrer_id = ? WHERE referrer_id = ?").bind(toId, fromId),
+    db.prepare("UPDATE staff SET collecting_for = NULL WHERE collecting_for = ?").bind(fromId),
+    db.prepare("UPDATE prefs SET link_state = NULL, otp_hash = NULL, otp_phone = NULL, otp_tries = 0 WHERE tg_id = ?").bind(toId),
+  ]);
+}
+
+export const setPrefs = (db, id, f) => {
+  const keys = Object.keys(f);
+  return db.prepare(`INSERT INTO prefs (tg_id, ${keys.join(", ")}) VALUES (?, ${keys.map(() => "?").join(", ")})
+    ON CONFLICT(tg_id) DO UPDATE SET ${keys.map((k) => `${k} = excluded.${k}`).join(", ")}, updated_at = datetime('now')`).bind(id, ...keys.map((k) => f[k])).run();
+};
+
+// ---------- ሴልሶች እና ካምፔኖች ----------
+
+export const staffById = (db, id) => db.prepare("SELECT * FROM staff WHERE id = ?").bind(id).first();
+export const staffByTg = (db, tg) => db.prepare("SELECT * FROM staff WHERE tg_id = ? AND active = 1").bind(tg).first();
+export const staffByCode = (db, code) => db.prepare("SELECT * FROM staff WHERE code = ? AND active = 1").bind(String(code).toUpperCase()).first();
+export const staffByToken = (db, token) => db.prepare("SELECT * FROM staff WHERE invite_token = ? AND active = 1").bind(token).first();
+export const campaignById = (db, id) => db.prepare("SELECT * FROM campaigns WHERE id = ?").bind(id).first();
+
+export async function staffList(db) {
+  const { results } = await db.prepare(`SELECT s.*,
+      (SELECT COUNT(*) FROM drivers d WHERE d.agent_id = s.id) AS started,
+      (SELECT COUNT(*) FROM drivers d WHERE d.agent_id = s.id AND d.status NOT IN ('awaiting_docs')) AS submitted,
+      (SELECT COUNT(*) FROM drivers d WHERE d.agent_id = s.id AND d.status IN ('active','suspended')) AS activated,
+      (SELECT COUNT(*) FROM drivers d WHERE d.agent_id = s.id AND d.tg_id <= ${NO_TG_BASE}) AS no_tg,
+      (SELECT COALESCE(SUM(commission_amount), 0) FROM drivers d WHERE d.agent_id = s.id AND d.commission_amount IS NOT NULL) AS earned,
+      (SELECT COALESCE(SUM(commission_amount), 0) FROM drivers d WHERE d.agent_id = s.id AND d.commission_amount IS NOT NULL AND d.commission_paid_at IS NULL) AS unpaid
+    FROM staff s ORDER BY s.active DESC, activated DESC, s.id ASC`).all();
+  return results;
+}
+
+export async function campaignList(db, { onlyActive = false, staffId = null } = {}) {
+  const where = [];
+  const vals = [];
+  if (onlyActive) where.push("c.active = 1");
+  if (staffId) where.push("c.id IN (SELECT campaign_id FROM campaign_agents WHERE staff_id = ?)"), vals.push(staffId);
+  const { results } = await db.prepare(`SELECT c.*,
+      (SELECT COUNT(*) FROM drivers d WHERE d.campaign_id = c.id) AS started,
+      (SELECT COUNT(*) FROM drivers d WHERE d.campaign_id = c.id AND d.status NOT IN ('awaiting_docs')) AS submitted,
+      (SELECT COUNT(*) FROM drivers d WHERE d.campaign_id = c.id AND d.status IN ('active','suspended')) AS activated,
+      (SELECT COALESCE(SUM(commission_amount), 0) FROM drivers d WHERE d.campaign_id = c.id) AS commission_total,
+      (SELECT GROUP_CONCAT(staff_id) FROM campaign_agents ca WHERE ca.campaign_id = c.id) AS agent_ids
+    FROM campaigns c ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY c.active DESC, COALESCE(c.start_date, c.created_at) DESC`).bind(...vals).all();
+  return results.map((c) => ({ ...c, agent_ids: c.agent_ids ? c.agent_ids.split(",").map(Number) : [] }));
+}
+
+export async function saveCampaign(db, c, by) {
+  let id = c.id;
+  if (id) {
+    await db.prepare("UPDATE campaigns SET name = ?, location = ?, start_date = ?, end_date = ?, commission = ?, active = ? WHERE id = ?")
+      .bind(c.name, c.location, c.start_date, c.end_date, c.commission, c.active ? 1 : 0, id).run();
+  } else {
+    const r = await db.prepare("INSERT INTO campaigns (name, location, start_date, end_date, commission, active, created_by) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id")
+      .bind(c.name, c.location, c.start_date, c.end_date, c.commission, c.active === false ? 0 : 1, by).first();
+    id = r.id;
+  }
+  if (Array.isArray(c.agent_ids)) {
+    const stmts = [db.prepare("DELETE FROM campaign_agents WHERE campaign_id = ?").bind(id)];
+    for (const sid of [...new Set(c.agent_ids.map(Number).filter(Boolean))]) stmts.push(db.prepare("INSERT INTO campaign_agents (campaign_id, staff_id) VALUES (?, ?)").bind(id, sid));
+    await db.batch(stmts);
+  }
+  return id;
+}
+
+export async function agentDrivers(db, staffId, limit = 200) {
+  const { results } = await db.prepare(`SELECT * FROM drivers WHERE ${staffId ? "agent_id = ?" : "agent_id IS NOT NULL"} ORDER BY updated_at DESC LIMIT ?`)
+    .bind(...(staffId ? [staffId, limit] : [limit])).all();
+  return results;
+}
+
+export async function commissions(db, { unpaidOnly = false } = {}) {
+  const { results } = await db.prepare(`SELECT d.tg_id, d.full_name, d.phone, d.driver_no, d.activated_at, d.commission_amount, d.commission_paid_at,
+      d.agent_id, s.name AS agent_name, s.code AS agent_code, s.telebirr AS agent_telebirr, s.phone AS agent_phone, c.name AS campaign_name
+    FROM drivers d JOIN staff s ON s.id = d.agent_id LEFT JOIN campaigns c ON c.id = d.campaign_id
+    WHERE d.commission_amount IS NOT NULL ${unpaidOnly ? "AND d.commission_paid_at IS NULL" : ""}
+    ORDER BY d.commission_paid_at IS NOT NULL, d.activated_at DESC LIMIT 500`).all();
+  return results;
+}
+
+// ---------- SMS ----------
+
+export const smsMonthCount = (db) =>
+  db.prepare("SELECT COUNT(*) AS n FROM sms_log WHERE status = 'sent' AND created_at >= date('now', 'start of month')").first().then((r) => r?.n ?? 0);
+export const logSms = (db, row) =>
+  db.prepare("INSERT INTO sms_log (phone, tg_id, kind, text, status, error) VALUES (?, ?, ?, ?, ?, ?)").bind(row.phone, row.tg_id ?? null, row.kind, row.text, row.status, row.error ?? null).run();
+export async function smsLog(db, limit = 100) {
+  const { results } = await db.prepare("SELECT l.*, d.full_name FROM sms_log l LEFT JOIN drivers d ON d.tg_id = l.tg_id ORDER BY l.id DESC LIMIT ?").bind(limit).all();
+  return results;
+}
+
+export async function apptsTomorrow(db, tomorrow, limit) {
+  const { results } = await db.prepare(`SELECT * FROM drivers WHERE status IN ('test','inspection','orientation') AND appt_at IS NOT NULL
+      AND substr(appt_at, 1, 10) = ? AND appt_reminded_at IS NULL LIMIT ?`).bind(tomorrow, limit).all();
+  return results;
+}

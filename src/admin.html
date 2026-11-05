@@ -261,6 +261,31 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
   .kv { grid-template-columns: 120px 1fr; }
   .hide-sm { display: none; }
 }
+.modal { position: fixed; inset: 0; background: rgba(15,23,42,.42); display: none; align-items: flex-start; justify-content: center; z-index: 60; padding: 6vh 14px; overflow: auto; }
+.modal.on { display: flex; }
+.modal .card { background: var(--panel); border-radius: var(--r-lg, 16px); width: min(560px, 100%); padding: 20px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.modal h3 { font-family: var(--display); margin: 0 0 14px; font-size: 19px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid label, .fld { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.form-grid .full { grid-column: 1 / -1; }
+.form-grid label.switch { flex-direction: row; align-items: center; gap: 9px; font-weight: 500; }
+.form-grid input, .form-grid select, .fld input { font: inherit; font-weight: 400; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); color: var(--ink); }
+.modal .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+.chips button.on { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); font-weight: 700; }
+.copy { display: flex; gap: 6px; align-items: center; }
+.copy code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--panel-2); padding: 6px 9px; border-radius: 8px; font-size: 12.5px; }
+.money { font-family: var(--display); font-weight: 700; font-variant-numeric: tabular-nums; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.off { opacity: .55; }
+.qr-sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.qr-card { border: 1px solid var(--line); border-radius: 14px; padding: 14px; text-align: center; background: #fff; color: #111; break-inside: avoid; }
+.qr-card svg { width: 100%; height: auto; }
+.qr-card b { display: block; font-size: 15px; margin-top: 6px; }
+.qr-card small { color: #555; }
+@media print { body * { visibility: hidden; } #print-area, #print-area * { visibility: visible; } #print-area { position: absolute; inset: 0; padding: 10mm; } }
+@media (max-width: 760px) { .form-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -269,6 +294,8 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
 <aside class="drawer" id="drawer" aria-hidden="true"></aside>
 <div class="lightbox" id="lightbox"><div><img id="lb-img" alt=""><div class="cap" id="lb-cap"></div></div></div>
 <div class="toast" id="toast" role="status"></div>
+<div class="modal" id="modal"><div class="card" id="modal-card"></div></div>
+<div id="print-area" hidden></div>
 
 <script>
 (function () {
@@ -310,8 +337,10 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
   var EV = {
     registered: ["ተመዘገበ", "b"], form_updated: ["ቅጹን አስተካከለ", ""], submitted: ["ሰነዶቹን አቀረበ", "y"], docs_approved: ["ሰነዶቹ ጸደቁ", "g"],
     doc_requested: ["ሰነድ እንደገና ተጠየቀ", "y"], rejected: ["ውድቅ ተደረገ", "r"], scheduled: ["ቀጠሮ ተያዘ", "b"], appt_confirmed: ["ቀጠሮውን አረጋገጠ", "g"],
-    appt_reschedule: ["ሌላ ቀን ጠየቀ", "y"], passed: ["አለፈ", "g"], activated: ["ገቢር ሆነ", "g"], suspended: ["ታገደ", "r"], unsuspended: ["እገዳ ተነሳ", "g"],
+    appt_reschedule: ["ሌላ ቀን ጠየቀ", "y"], passed: ["አለፈ", "g"], activated: ["ለስራ ዝግጁ ሆነ", "g"], suspended: ["ታገደ", "r"], unsuspended: ["እገዳ ተነሳ", "g"],
     note: ["ማስታወሻ", ""], fix_submitted: ["እገዳ ለማንሳት ማስተካከያ አቀረበ", "y"], fix_rejected: ["ማስተካከያው በቂ አልሆነም", "r"], settings_changed: ["ቅንብሮችን ቀየረ", "b"], message: ["መልዕክት ተላከ", "b"], referral_reward: ["የጥቆማ ሽልማት ማሳወቂያ", "g"], referral_paid: ["የጥቆማ ሽልማት ተከፈለ", "g"], admin_login: ["ወደ ዳሽቦርድ ገባ", ""],
+    staff_saved: ["ሴልስ ተመዘገበ/ተቀየረ", "b"], staff_linked: ["ሴልስ Telegram አገናኘ", "g"], campaign_saved: ["ካምፔን ተቀመጠ", "b"], telegram_linked: ["Telegram አገናኘ", "g"],
+    commission_paid: ["የሴልስ ኮሚሽን ተከፈለ", "g"], agent_registered: ["በሴልስ ተመዘገበ", "b"],
   };
   function evDetail(e) {
     if (!e.detail) return "";
@@ -334,7 +363,7 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
   // ---------- shell ----------
   var VIEWS = [
     ["board", "🛣", "ቦርድ"], ["drivers", "👥", "አሽከርካሪዎች"], ["appointments", "📅", "ቀጠሮዎች"],
-    ["referrals", "🤝", "ጥቆማዎች"], ["activity", "🕘", "እንቅስቃሴ"], ["reports", "📈", "ሪፖርት"], ["settings", "⚙️", "ቅንብሮች"],
+    ["referrals", "🤝", "ጥቆማዎች"], ["activity", "🕘", "እንቅስቃሴ"], ["sales", "🧑‍💼", "ሴልሶች"], ["campaigns", "📣", "ካምፔኖች"], ["reports", "📈", "ሪፖርት"], ["settings", "⚙️", "ቅንብሮች"],
   ];
   function shell() {
     root.innerHTML = '<div class="app"><nav class="rail"><div class="logo"><div class="logo-mark"></div><div><b>' + h(BRAND) + '</b><small>Driver Ops</small></div></div><div class="nav">' +
@@ -351,8 +380,8 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
     if (!VIEWS.some(function (x) { return x[0] === v; })) v = "board";
     [].forEach.call(document.querySelectorAll(".nav a"), function (a) { a.classList.toggle("on", a.dataset.v === v); });
     $("#vtitle").textContent = VIEWS.find(function (x) { return x[0] === v; })[2];
-    clearInterval(refreshT);
-    ({ board: board, drivers: drivers, appointments: appointments, referrals: referrals, activity: activity, reports: reports, settings: settings })[v]();
+    clearInterval(refreshT); closeModal();
+    ({ board: board, drivers: drivers, appointments: appointments, referrals: referrals, activity: activity, sales: sales, campaigns: campaigns, reports: reports, settings: settings })[v]();
     if (v === "board") refreshT = setInterval(function () { if (!document.hidden && !$("#drawer").classList.contains("on")) board(true); }, 60000);
     var id = (location.hash.split("/")[1] || "");
     if (/^\d+$/.test(id)) openDriver(Number(id));
@@ -361,6 +390,7 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
   function dcard(c) {
     var tags = [];
     if (c.green) tags.push('<span class="tag g">⚡ ቅድሚያ</span>');
+    if (c.no_tg) tags.push('<span class="tag" title="Telegram የለውም — መልዕክቶች በSMS እና በሴልሱ በኩል">📵 SMS</span>');
     if (c.status === "pending" && c.next_stage) tags.push('<span class="tag">→ ' + h(STAGE[c.next_stage]) + "</span>");
     if (["test", "inspection", "orientation"].indexOf(c.status) >= 0) {
       tags.push(c.appt_label ? '<span class="tag b">📅 ' + h(c.appt_label.split(" — ")[0]) + "</span>" + (c.appt_confirmed ? '<span class="tag g">✓ አረጋግጧል</span>' : "") : '<span class="tag y">ቀጠሮ ያስፈልጋል</span>');
@@ -384,7 +414,7 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
       var badge = $("#nav-badge"); badge.hidden = !needs; badge.textContent = needs;
       var stops = [
         ["awaiting_docs", "ሰነድ በመጠበቅ", "ቅጽ ሞልተዋል"], ["pending", "ግምገማ", "ውሳኔ ይጠብቃሉ", 1], ["test", "ፈተና", "መኪና የሌላቸው"],
-        ["inspection", "ፍተሻ", "ከ" + M.rules.inspection_after + " ዓመት በላይ"], ["orientation", "ስልጠና", "የመጨረሻ ደረጃ"], ["active", "ገቢር", "+" + s.activatedWeek + " በሳምንቱ", 0, 1],
+        ["inspection", "ፍተሻ", "ከ" + M.rules.inspection_after + " ዓመት በላይ"], ["orientation", "ስልጠና", "የመጨረሻ ደረጃ"], ["active", "ለስራ ዝግጁ", "+" + s.activatedWeek + " በሳምንቱ", 0, 1],
       ];
       var cols = [["awaiting_docs", "📎 ሰነድ በመጠበቅ"], ["pending", "⏳ ሰነድ ግምገማ", 1], ["test", "📝 ፈተና"], ["inspection", "🔧 የመኪና ፍተሻ"], ["orientation", "🎓 ስልጠና"]];
       var today = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
@@ -427,7 +457,9 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
   }
 
   // ---------- drivers ----------
-  var DS = { q: "", status: "", service: "", mode: "", fuel: "", sort: "recent", offset: 0 };
+  var DS = { q: "", status: "", service: "", mode: "", fuel: "", agent: "", campaign: "", sort: "recent", offset: 0 };
+  var SALES = null; // {staff, campaigns} — ለማጣሪያዎች
+  function salesLists() { return SALES ? Promise.resolve(SALES) : api("campaigns").then(function (r) { SALES = r; return r; }); }
   function drivers() {
     var view = $("#view");
     var sel = function (id, opts) { return '<select id="' + id + '">' + opts.map(function (o) { return '<option value="' + h(o[0]) + '"' + (DS[id.slice(2)] === o[0] ? " selected" : "") + ">" + h(o[1]) + "</option>"; }).join("") + "</select>"; };
@@ -437,9 +469,16 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
       sel("f-service", [["", "ሁሉም አገልግሎቶች"], ["share", "Cabby Share"], ["reserve", "Cabby Reserve"]]) +
       sel("f-mode", [["", "መኪና፦ ሁሉም"], ["own", "የራሱ መኪና"], ["other", "የሌላ ሰው መኪና"], ["none", "መኪና የለውም"]]) +
       sel("f-fuel", [["", "ነዳጅ፦ ሁሉም"], ["green", "⚡ ኤሌክትሪክ + ሃይብሪድ"], ["electric", "ኤሌክትሪክ"], ["hybrid", "ሃይብሪድ"], ["petrol", "ቤንዚን"], ["diesel", "ናፍጣ"]]) +
+      '<span id="f-sales"></span>' +
       sel("f-sort", [["recent", "በቅርብ የተቀየሩ"], ["oldest", "ረጅም የጠበቁ"], ["name", "በስም"], ["code", "በCB ኮድ"]]) +
       '<span class="count" id="f-count"></span></div><div id="tbl"><div class="empty">በመጫን ላይ…</div></div>';
     ["status", "service", "mode", "fuel", "sort"].forEach(function (k) { $("#f-" + k).addEventListener("change", function () { DS[k] = this.value; DS.offset = 0; load(); }); });
+    salesLists().then(function (L) {
+      if (!L.staff.length && !L.campaigns.length) return;
+      $("#f-sales").outerHTML = sel("f-agent", [["", "ሴልስ፦ ሁሉም"]].concat(L.staff.map(function (x) { return [String(x.id), x.name + " (" + x.code + ")"]; }))) +
+        sel("f-campaign", [["", "ካምፔን፦ ሁሉም"]].concat(L.campaigns.map(function (x) { return [String(x.id), x.name]; })));
+      ["agent", "campaign"].forEach(function (k) { $("#f-" + k).addEventListener("change", function () { DS[k] = this.value; DS.offset = 0; load(); }); });
+    });
     var qt; $("#f-q").addEventListener("input", function () { var v = this.value; clearTimeout(qt); qt = setTimeout(function () { DS.q = v.trim(); DS.offset = 0; load(); }, 300); });
     function load() {
       var qs = Object.keys(DS).filter(function (k) { return DS[k] !== "" && DS[k] != null; }).map(function (k) { return k + "=" + encodeURIComponent(DS[k]); }).join("&");
@@ -448,7 +487,7 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
         if (!r.rows.length) { $("#tbl").innerHTML = '<div class="empty">ምንም አልተገኘም። ማጣሪያዎቹን ይቀይሩ።</div>'; return; }
         $("#tbl").innerHTML = "<table><thead><tr><th>ስም</th><th>ስልክ</th><th class=\"hide-sm\">መኪና</th><th class=\"hide-sm\">አገልግሎት</th><th>ሁኔታ</th><th class=\"hide-sm\">የተቀየረ</th></tr></thead><tbody>" +
           r.rows.map(function (c) {
-            return '<tr data-id="' + c.tg_id + '"><td><b>' + h(c.full_name) + "</b>" + (c.green ? ' <span class="tag g">⚡</span>' : "") + (c.code ? '<div style="color:var(--muted);font-size:12.5px">' + h(c.code) + "</div>" : "") + "</td><td>" + h(c.phone) +
+            return '<tr data-id="' + c.tg_id + '"><td><b>' + h(c.full_name) + "</b>" + (c.green ? ' <span class="tag g">⚡</span>' : "") + (c.no_tg ? ' <span class="tag" title="Telegram የለውም">📵</span>' : "") + (c.code ? '<div style="color:var(--muted);font-size:12.5px">' + h(c.code) + "</div>" : "") + "</td><td>" + h(c.phone) +
               '</td><td class="hide-sm">' + h(c.vehicle || "—") + '</td><td class="hide-sm">' + h(list("services", c.services)) + "</td><td>" + pill(c.status) + '</td><td class="hide-sm" style="color:var(--muted)">' + h(ago(c.updated_at)) + "</td></tr>";
           }).join("") + "</tbody></table>" +
           (r.total > 50 ? '<div class="pager"><button class="btn sm" id="pg-prev"' + (DS.offset ? "" : " disabled") + '>← ቀዳሚ</button><span style="align-self:center;color:var(--muted)">' + (DS.offset + 1) + "–" + Math.min(DS.offset + 50, r.total) + '</span><button class="btn sm" id="pg-next"' + (DS.offset + 50 < r.total ? "" : " disabled") + ">ቀጣይ →</button></div>" : "");
@@ -499,12 +538,12 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
       view.innerHTML = '<div class="split" style="margin-top:0"><section class="panel"><div class="panel-head"><h3>የሚከፈሉ ሽልማቶች</h3><span style="margin-left:auto;color:var(--muted)">' + unpaid.length + (r.reward ? " × " + h(r.reward) : "") + '</span></div><div class="rows">' +
         (r.payouts.length ? r.payouts.map(function (p) {
           return '<div class="rowi"><div class="who"><b>' + h(p.referrer_name) + "</b> " + h(p.referrer_code || "") + " → " + h(p.full_name) + " " + h(p.code || "") +
-            "<div>Telebirr " + h(p.referrer_telebirr || "—") + " · ገቢር የሆነው " + h(ago(p.activated_at)) + "</div></div>" +
+            "<div>Telebirr " + h(p.referrer_telebirr || "—") + " · ለስራ ዝግጁ የሆነው " + h(ago(p.activated_at)) + "</div></div>" +
             (p.paid_at ? '<span class="tag g">✓ ተከፍሏል</span>' : '<button class="btn sm go" data-pay="' + p.tg_id + '">ተከፍሏል ብለህ ምልክት አድርግ</button>') + "</div>";
-        }).join("") : '<div class="empty">እስካሁን በጥቆማ ገቢር የሆነ የለም።</div>') + '</div></section>' +
+        }).join("") : '<div class="empty">እስካሁን በጥቆማ ለስራ ዝግጁ የሆነ የለም።</div>') + '</div></section>' +
         '<section class="panel"><div class="panel-head"><h3>ምርጥ ጠቋሚዎች</h3></div><div class="rows">' +
         (r.board.length ? r.board.map(function (b, i) {
-          return '<div class="rowi clickable" data-id="' + b.tg_id + '"><span class="when num">' + (i + 1) + '</span><div class="who"><b>' + h(b.full_name) + "</b> " + h(b.driver_no ? "CB" + b.driver_no : "") + "<div>" + b.referred + " ጠቁሟል · " + b.activated + " ገቢር" + (b.unpaid ? " · " + b.unpaid + " ያልተከፈለ" : "") + "</div></div></div>";
+          return '<div class="rowi clickable" data-id="' + b.tg_id + '"><span class="when num">' + (i + 1) + '</span><div class="who"><b>' + h(b.full_name) + "</b> " + h(b.driver_no ? "CB" + b.driver_no : "") + "<div>" + b.referred + " ጠቁሟል · " + b.activated + " ለስራ ዝግጁ" + (b.unpaid ? " · " + b.unpaid + " ያልተከፈለ" : "") + "</div></div></div>";
         }).join("") : '<div class="empty">ጥቆማ እስካሁን የለም።</div>') + "</div></section></div>";
       bindCards(view);
       [].forEach.call(view.querySelectorAll("[data-pay]"), function (b) {
@@ -543,10 +582,10 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
       var conv = submitted ? Math.round((n("active") + n("suspended")) / submitted * 100) : 0;
       var ref = (a.sources.find(function (x) { return x.k === "referral"; }) || {}).n || 0;
       view.innerHTML = '<div class="kpis">' +
-        kpi(n("active"), "ገቢር አሽከርካሪዎች") + kpi(conv + "%", "ሰነድ ካቀረቡት ገቢር የሆኑ") +
-        kpi(a.avgDaysToActive != null ? a.avgDaysToActive.toFixed(1) : "—", "ከምዝገባ እስከ ገቢር (አማካይ ቀን)") + kpi(total ? Math.round(ref / total * 100) + "%" : "—", "በጥቆማ የመጡ") + "</div>" +
-        '<section class="panel" style="margin-bottom:14px"><div class="panel-head"><h3>ምዝገባ እና ገቢር — ያለፉት 30 ቀናት</h3></div>' +
-        '<div class="legend"><span><i style="background:var(--s1)"></i>አዲስ ምዝገባ</span><span><i style="background:var(--s2)"></i>ገቢር የሆኑ</span></div><div class="chart" id="ch-line"></div></section>' +
+        kpi(n("active"), "ለስራ ዝግጁ አሽከርካሪዎች") + kpi(conv + "%", "ሰነድ ካቀረቡት ለስራ ዝግጁ የሆኑ") +
+        kpi(a.avgDaysToActive != null ? a.avgDaysToActive.toFixed(1) : "—", "ከምዝገባ እስከ ለስራ ዝግጁ (አማካይ ቀን)") + kpi(total ? Math.round(ref / total * 100) + "%" : "—", "በጥቆማ የመጡ") + "</div>" +
+        '<section class="panel" style="margin-bottom:14px"><div class="panel-head"><h3>ምዝገባ እና ለስራ ዝግጁ — ያለፉት 30 ቀናት</h3></div>' +
+        '<div class="legend"><span><i style="background:var(--s1)"></i>አዲስ ምዝገባ</span><span><i style="background:var(--s2)"></i>ለስራ ዝግጁ የሆኑ</span></div><div class="chart" id="ch-line"></div></section>' +
         '<div class="grid2">' + barPanel("አገልግሎት", a.services.map(function (x) { return [list("services", x.k).replace("፣ ", " + "), x.n]; })) +
         barPanel("ነዳጅ", a.fuel.map(function (x) { return [x.k === "none" ? "መኪና የለውም" : O("fuel", x.k), x.n]; })) +
         barPanel("የመኪና ሁኔታ", a.mode.map(function (x) { return [O("mode", x.k), x.n]; })) +
@@ -571,7 +610,7 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
     var path = function (arr) { return arr.map(function (v, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); }).join(" "); };
     var g = ""; for (var k = 0; k <= 4; k++) g += '<line class="grid" x1="' + P.l + '" x2="' + (W - P.r) + '" y1="' + y(k * step) + '" y2="' + y(k * step) + '"/><text class="axis" x="' + (P.l - 8) + '" y="' + (y(k * step) + 4) + '" text-anchor="end">' + k * step + "</text>";
     var lab = ""; dates.forEach(function (d, i) { if (i % 5 === 0 || i === days - 1) lab += '<text class="axis" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">' + d.slice(8) + "/" + d.slice(5, 7) + "</text>"; });
-    el.innerHTML = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="ምዝገባ እና ገቢር በቀን">' + g + lab +
+    el.innerHTML = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="ምዝገባ እና ለስራ ዝግጁ በቀን">' + g + lab +
       '<path d="' + path(a) + '" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/><path d="' + path(b) + '" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>' +
       '<line id="xh" y1="' + P.t + '" y2="' + (H - P.b) + '" stroke="var(--muted)" stroke-dasharray="3 3" style="display:none"/><circle id="d1" r="4" fill="var(--s1)" stroke="var(--panel)" stroke-width="2" style="display:none"/><circle id="d2" r="4" fill="var(--s2)" stroke="var(--panel)" stroke-width="2" style="display:none"/>' +
       '<rect x="' + P.l + '" y="0" width="' + (W - P.l - P.r) + '" height="' + H + '" fill="transparent" id="hit"/></svg><div class="tip" id="tip"></div>';
@@ -583,12 +622,168 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
       var xh = el.querySelector("#xh"); xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.style.display = "";
       var d1 = el.querySelector("#d1"), d2 = el.querySelector("#d2");
       d1.setAttribute("cx", x(i)); d1.setAttribute("cy", y(a[i])); d1.style.display = ""; d2.setAttribute("cx", x(i)); d2.setAttribute("cy", y(b[i])); d2.style.display = "";
-      tip.innerHTML = "<b>" + dates[i].slice(8) + "/" + dates[i].slice(5, 7) + "</b> · ምዝገባ " + a[i] + " · ገቢር " + b[i];
+      tip.innerHTML = "<b>" + dates[i].slice(8) + "/" + dates[i].slice(5, 7) + "</b> · ምዝገባ " + a[i] + " · ለስራ ዝግጁ " + b[i];
       tip.style.left = (x(i) / W * r.width + 18) + "px"; tip.style.top = (Math.min(y(a[i]), y(b[i])) / H * r.height + 6) + "px"; tip.style.display = "block";
     });
     el.querySelector("#hit").addEventListener("mouseleave", hide);
   }
 
+
+  // ---------- modal ----------
+  function modal(html) { $("#modal-card").innerHTML = html; $("#modal").classList.add("on"); var f = $("#modal-card input"); if (f) f.focus(); }
+  function closeModal() { $("#modal").classList.remove("on"); }
+  $("#modal").addEventListener("click", function (e) { if (e.target === this || e.target.dataset.close != null) closeModal(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+  function copyText(t) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { toast("✓ ተቀድቷል"); }, function () { window.prompt("ይቅዱ፦", t); }); }
+  function money(n) { return '<span class="money">' + Number(n || 0).toLocaleString("en-US") + "</span> ብር"; }
+
+  // ---------- sales ----------
+  function sales() {
+    var view = $("#view");
+    view.innerHTML = '<div class="empty">በመጫን ላይ…</div>';
+    Promise.all([api("staff"), api("commissions")]).then(function (res) {
+      var staff = res[0].staff, cm = res[1];
+      SALES = null;
+      var unpaidTotal = cm.agents.reduce(function (x, a) { return x + a.unpaid; }, 0);
+      var act = staff.filter(function (x) { return x.active; });
+      view.innerHTML = '<div class="kpis">' + kpi(act.length, "ንቁ ሴልሶች") + kpi(staff.reduce(function (x, s) { return x + s.started; }, 0), "በሴልስ የመጡ") +
+        kpi(staff.reduce(function (x, s) { return x + s.activated; }, 0), "ለስራ ዝግጁ የሆኑ") + kpi(unpaidTotal.toLocaleString("en-US") + " ብር", "ያልተከፈለ ኮሚሽን") + "</div>" +
+        '<section class="panel" style="margin-bottom:14px"><div class="panel-head"><h3>ሴልሶች እና ቡድን መሪዎች</h3><button class="btn sm primary" id="st-add" style="margin-left:auto">+ ሴልስ ጨምር</button></div>' +
+        (staff.length ? '<div style="overflow-x:auto"><table><thead><tr><th>ስም</th><th>ሚና</th><th class="hide-sm">ስልክ</th><th>Telegram</th><th class="num">የጀመሩ</th><th class="num">ያቀረቡ</th><th class="num">ለስራ ዝግጁ</th><th class="num hide-sm">📵</th><th class="num">ያልተከፈለ</th><th></th></tr></thead><tbody>' +
+          staff.map(function (x) {
+            return '<tr class="' + (x.active ? "" : "off") + '"><td><b>' + h(x.name) + '</b><div style="color:var(--muted);font-size:12.5px">' + h(x.code || "") + (x.active ? "" : " · ተሰናብቷል") + "</div></td>" +
+              "<td>" + (x.role === "supervisor" ? '<span class="tag b">ቡድን መሪ</span>' : "ሴልስ") + '</td><td class="hide-sm">' + h(x.phone) + "</td>" +
+              "<td>" + (x.tg_id ? '<span class="tag g">✓ ' + h(x.username ? "@" + x.username : "ተገናኝቷል") + "</span>" : '<button class="btn sm" data-inv="' + x.id + '">🔗 የመግቢያ ሊንክ</button>') + "</td>" +
+              '<td class="num">' + x.started + '</td><td class="num">' + x.submitted + '</td><td class="num"><b>' + x.activated + '</b></td><td class="num hide-sm">' + x.no_tg + "</td>" +
+              '<td class="num">' + (x.unpaid ? money(x.unpaid) : '<span style="color:var(--muted)">—</span>') + "</td>" +
+              '<td style="white-space:nowrap"><button class="btn sm" data-drv="' + x.id + '" title="አሽከርካሪዎቹ">👥</button> <button class="btn sm" data-edit="' + x.id + '" title="አስተካክል">✎</button></td></tr>';
+          }).join("") + "</tbody></table></div>" : '<div class="empty">ሴልስ እስካሁን አልተመዘገበም። "+ ሴልስ ጨምር" ብለው ይጀምሩ፤ የሚፈጠረውን የመግቢያ ሊንክ ለሴልሱ ይላኩ።</div>') + "</section>" +
+        '<section class="panel"><div class="panel-head"><h3>የኮሚሽን ክፍያ</h3><span style="margin-left:auto;color:var(--muted)">አሽከርካሪው ለስራ ዝግጁ ሲሆን ይቆጠራል</span></div><div class="rows">' +
+        (cm.agents.length ? cm.agents.map(function (a) {
+          return '<div class="rowi"><div class="who"><b>' + h(a.name) + "</b> " + h(a.code) + "<div>Telebirr " + h(a.telebirr || "—") + " · " + a.count + " ለስራ ዝግጁ · በአጠቃላይ " + a.total.toLocaleString("en-US") + " ብር</div></div>" +
+            (a.unpaid ? '<span style="margin-right:10px">' + money(a.unpaid) + " (" + a.unpaid_count + ')</span><button class="btn sm go" data-payagent="' + a.agent_id + '" data-sum="' + a.unpaid + '">ተከፍሏል ብለህ ምልክት አድርግ</button>' : '<span class="tag g">✓ ሁሉም ተከፍሏል</span>') + "</div>";
+        }).join("") : '<div class="empty">ኮሚሽን እስካሁን የለም — ሴልሶች ያመጡት አሽከርካሪ ለስራ ዝግጁ ሲሆን እዚህ ይታያል።</div>') + "</div>" +
+        (cm.rows.length ? '<details style="padding:0 16px 14px"><summary style="cursor:pointer;color:var(--muted);padding:8px 0">ዝርዝሩን እይ (' + cm.rows.length + ")</summary><table><thead><tr><th>አሽከርካሪ</th><th>ሴልስ</th><th class=\"hide-sm\">ካምፔን</th><th class=\"num\">ብር</th><th>ሁኔታ</th></tr></thead><tbody>" +
+          cm.rows.map(function (r) { return '<tr data-id="' + r.tg_id + '"><td>' + h(r.full_name) + (r.driver_no ? ' <span style="color:var(--muted)">CB' + r.driver_no + "</span>" : "") + "</td><td>" + h(r.agent_name) + '</td><td class="hide-sm">' + h(r.campaign_name || "—") + '</td><td class="num">' + r.commission_amount + "</td><td>" + (r.commission_paid_at ? '<span class="tag g">ተከፍሏል</span>' : '<button class="btn sm" data-payone="' + r.tg_id + '">ተከፍሏል</button>') + "</td></tr>"; }).join("") + "</tbody></table></details>" : "") +
+        "</section>";
+      $("#st-add").onclick = function () { staffForm({}); };
+      [].forEach.call(view.querySelectorAll("[data-edit]"), function (b) { b.onclick = function () { staffForm(staff.find(function (x) { return x.id === Number(b.dataset.edit); })); }; });
+      [].forEach.call(view.querySelectorAll("[data-drv]"), function (b) { b.onclick = function () { DS = { q: "", status: "", service: "", mode: "", fuel: "", agent: b.dataset.drv, campaign: "", sort: "recent", offset: 0 }; location.hash = "drivers"; }; });
+      [].forEach.call(view.querySelectorAll("[data-inv]"), function (b) {
+        b.onclick = function () { var x = staff.find(function (s) { return s.id === Number(b.dataset.inv); }); x.invite_link ? inviteModal(x.name, x.invite_link) : regenInvite(x); };
+      });
+      [].forEach.call(view.querySelectorAll("[data-payagent]"), function (b) {
+        b.onclick = function () {
+          if (!window.confirm(b.dataset.sum + " ብር ለሴልሱ መከፈሉን ያረጋግጣሉ?")) return;
+          b.disabled = true;
+          api("commissions/agent/" + b.dataset.payagent + "/paid", { method: "POST", body: {} }).then(function (r) { if (r.ok) { toast("✓ " + r.total + " ብር ተመዝግቧል"); sales(); } else { toast(r.error, 1); b.disabled = false; } });
+        };
+      });
+      [].forEach.call(view.querySelectorAll("[data-payone]"), function (b) {
+        b.onclick = function (e) { e.stopPropagation(); b.disabled = true; api("commission/" + b.dataset.payone + "/paid", { method: "POST", body: {} }).then(function (r) { if (r.ok) { toast("✓ ተመዝግቧል"); sales(); } else { toast(r.error, 1); b.disabled = false; } }); };
+      });
+      bindCards(view.querySelector("details") || document.createElement("div"));
+    });
+  }
+  function inviteModal(name, link) {
+    modal("<h3>የ" + h(name) + " የመግቢያ ሊንክ</h3><p class=\"hint\">ይህንን ሊንክ ለሴልሱ ይላኩ። ሲከፍተው ቦቱ ከTelegram አካውንቱ ጋር ያገናኘዋል እና የሴልስ ገጹን (QR፣ አሽከርካሪዎቹ፣ ኮሚሽን) ያገኛል። ሊንኩ አንድ ጊዜ ብቻ ይሰራል።</p>" +
+      '<div class="copy"><code>' + h(link) + '</code><button class="btn sm primary" id="cp">ቅዳ</button></div><div class="foot"><button class="btn" data-close>ዝጋ</button></div>');
+    $("#cp").onclick = function () { copyText(link); };
+  }
+  function regenInvite(x) {
+    if (x.tg_id && !window.confirm("አዲስ ሊንክ ሲፈጠር የአሁኑ Telegram ግንኙነት ይቋረጣል። ይቀጥል?")) return;
+    api("staff/" + x.id + "/invite", { method: "POST", body: {} }).then(function (r) { if (r.ok) { inviteModal(x.name, r.invite_link); sales(); } else toast(r.error, 1); });
+  }
+  function staffForm(x) {
+    var isNew = !x.id;
+    modal("<h3>" + (isNew ? "አዲስ ሴልስ" : h(x.name) + " · " + h(x.code)) + '</h3><div class="form-grid">' +
+      '<label class="full">ሙሉ ስም<input id="sf-name" value="' + h(x.name || "") + '"></label>' +
+      '<label>ስልክ<input id="sf-phone" inputmode="tel" value="' + h(x.phone || "") + '" placeholder="09…"></label>' +
+      '<label>Telebirr (ኮሚሽን የሚከፈልበት)<input id="sf-tb" inputmode="tel" value="' + h(x.telebirr && x.telebirr !== x.phone ? x.telebirr : "") + '" placeholder="ባዶ ከሆነ ስልኩ"></label>' +
+      '<label class="full">ሚና<select id="sf-role"><option value="agent">ሴልስ — የራሱን QR እና አሽከርካሪዎች ብቻ ያያል</option><option value="supervisor"' + (x.role === "supervisor" ? " selected" : "") + ">ቡድን መሪ — ቡድኑን ያያል፣ ካምፔን ይፈጥራል</option></select></label>" +
+      (isNew ? "" : '<label class="switch full"><input type="checkbox" id="sf-active"' + (x.active ? " checked" : "") + "> ንቁ (ሲጠፋ ሴልሱ ገጹን መጠቀም አይችልም፤ QR ኮዱም አይሰራም)</label>") +
+      '</div><div class="foot">' + (isNew ? "" : '<button class="btn" id="sf-inv" style="margin-right:auto">🔗 አዲስ የመግቢያ ሊንክ</button>') + '<button class="btn" data-close>ተው</button><button class="btn primary" id="sf-save">' + (isNew ? "ሴልስ ጨምር" : "አስቀምጥ") + "</button></div>");
+    if (!isNew) $("#sf-inv").onclick = function () { closeModal(); regenInvite(x); };
+    $("#sf-save").onclick = function () {
+      var b = this, nm = $("#sf-name").value.trim(); b.disabled = true;
+      api("staff", { method: "POST", body: { id: x.id, name: $("#sf-name").value, phone: $("#sf-phone").value, telebirr: $("#sf-tb").value, role: $("#sf-role").value, active: isNew ? true : $("#sf-active").checked } }).then(function (r) {
+        b.disabled = false;
+        if (!r.ok) return toast(r.error, 1);
+        closeModal(); sales();
+        if (isNew) setTimeout(function () { inviteModal(nm, r.invite_link); }, 50);
+        else toast("✓ ተቀምጧል");
+      });
+    };
+  }
+
+  // ---------- campaigns ----------
+  function campaigns() {
+    var view = $("#view");
+    view.innerHTML = '<div class="empty">በመጫን ላይ…</div>';
+    api("campaigns").then(function (r) {
+      SALES = r;
+      var today = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
+      function state(c) {
+        if (!c.active) return '<span class="tag">ተዘግቷል</span>';
+        if (c.start_date && c.start_date > today) return '<span class="tag b">ይጀምራል ' + h(c.start_date.slice(5).split("-").reverse().join("/")) + "</span>";
+        if (c.end_date && c.end_date < today) return '<span class="tag y">አልቋል</span>';
+        return '<span class="tag g">● እየሄደ ነው</span>';
+      }
+      view.innerHTML = '<section class="panel"><div class="panel-head"><h3>ካምፔኖች</h3><button class="btn sm primary" id="cp-add" style="margin-left:auto">+ ካምፔን ፍጠር</button></div>' +
+        (r.campaigns.length ? '<div style="overflow-x:auto"><table><thead><tr><th>ካምፔን</th><th class="hide-sm">ቦታ</th><th>ቀን</th><th>ሁኔታ</th><th class="num">ሴልሶች</th><th class="num">የጀመሩ</th><th class="num">ለስራ ዝግጁ</th><th class="num hide-sm">ኮሚሽን</th><th></th></tr></thead><tbody>' +
+          r.campaigns.map(function (c) {
+            var dt = function (d) { return d ? d.slice(5).split("-").reverse().join("/") : "…"; };
+            return '<tr class="' + (c.active ? "" : "off") + '"><td><b>' + h(c.name) + '</b></td><td class="hide-sm">' + h(c.location || "—") + "</td><td>" + (c.start_date || c.end_date ? dt(c.start_date) + " – " + dt(c.end_date) : "—") + "</td><td>" + state(c) + "</td>" +
+              '<td class="num">' + c.agent_ids.length + '</td><td class="num">' + c.started + '</td><td class="num"><b>' + c.activated + '</b></td><td class="num hide-sm">' + (c.commission != null ? c.commission + " ብር" : '<span style="color:var(--muted)">' + r.default_commission + " (መነሻ)</span>") + "</td>" +
+              '<td style="white-space:nowrap"><button class="btn sm" data-qr="' + c.id + '" title="QR ኮዶችን አትም">🖨 QR</button> <button class="btn sm" data-cd="' + c.id + '" title="አሽከርካሪዎቹ">👥</button> <button class="btn sm" data-ce="' + c.id + '">✎</button></td></tr>';
+          }).join("") + "</tbody></table></div>" : '<div class="empty">ካምፔን እስካሁን የለም። ካምፔን ሲፈጥሩ ቦታ፣ ቀን እና የሚሳተፉ ሴልሶችን ይመርጣሉ፤ እያንዳንዱ ሴልስ ለካምፔኑ የራሱ QR ያገኛል።</div>') + "</section>";
+      $("#cp-add").onclick = function () { campaignForm({ agent_ids: [] }, r); };
+      [].forEach.call(view.querySelectorAll("[data-ce]"), function (b) { b.onclick = function () { campaignForm(r.campaigns.find(function (c) { return c.id === Number(b.dataset.ce); }), r); }; });
+      [].forEach.call(view.querySelectorAll("[data-cd]"), function (b) { b.onclick = function () { DS = { q: "", status: "", service: "", mode: "", fuel: "", agent: "", campaign: b.dataset.cd, sort: "recent", offset: 0 }; location.hash = "drivers"; }; });
+      [].forEach.call(view.querySelectorAll("[data-qr]"), function (b) { b.onclick = function () { printQr(Number(b.dataset.qr)); }; });
+    });
+  }
+  function campaignForm(c, r) {
+    var isNew = !c.id, picked = c.agent_ids.slice();
+    modal("<h3>" + (isNew ? "አዲስ ካምፔን" : h(c.name)) + '</h3><div class="form-grid">' +
+      '<label class="full">ስም<input id="cf-name" value="' + h(c.name || "") + '" placeholder="ለምሳሌ፦ ቦሌ መድኃኔዓለም — ህዳር"></label>' +
+      '<label class="full">ቦታ<input id="cf-loc" value="' + h(c.location || "") + '" placeholder="ክፍለ ከተማ / ሰፈር / ቦታ"></label>' +
+      '<label>የሚጀምርበት<input id="cf-start" type="date" value="' + h(c.start_date || "") + '"></label><label>የሚያልቅበት<input id="cf-end" type="date" value="' + h(c.end_date || "") + '"></label>' +
+      '<label class="full">ኮሚሽን ለስራ ዝግጁ ለሆነ ለአንድ አሽከርካሪ (ብር)<input id="cf-com" type="number" min="0" value="' + h(c.commission != null ? c.commission : "") + '" placeholder="ባዶ ከሆነ መነሻው ' + r.default_commission + ' ብር"></label>' +
+      '<div class="fld full">የሚሳተፉ ሴልሶች<div class="chips" id="cf-agents">' + (r.staff.length ? r.staff.map(function (s) { return '<button type="button" data-s="' + s.id + '" class="' + (picked.indexOf(s.id) >= 0 ? "on" : "") + '">' + h(s.name) + " · " + h(s.code) + "</button>"; }).join("") : '<span style="color:var(--muted);font-weight:400">ንቁ ሴልስ የለም — መጀመሪያ በ"ሴልሶች" ገጽ ይጨምሩ።</span>') + "</div></div>" +
+      (isNew ? "" : '<label class="switch full"><input type="checkbox" id="cf-active"' + (c.active ? " checked" : "") + "> ክፍት (ሲዘጋ አዲስ ምዝገባ ወደዚህ ካምፔን አይቆጠርም)</label>") +
+      '</div><div class="foot"><button class="btn" data-close>ተው</button><button class="btn primary" id="cf-save">' + (isNew ? "ካምፔን ፍጠር" : "አስቀምጥ") + "</button></div>");
+    [].forEach.call(document.querySelectorAll("#cf-agents [data-s]"), function (b) { b.onclick = function () { b.classList.toggle("on"); }; });
+    $("#cf-save").onclick = function () {
+      var b = this; b.disabled = true;
+      var ids = [].filter.call(document.querySelectorAll("#cf-agents [data-s]"), function (x) { return x.classList.contains("on"); }).map(function (x) { return Number(x.dataset.s); });
+      api("campaigns", { method: "POST", body: { id: c.id, name: $("#cf-name").value, location: $("#cf-loc").value, start_date: $("#cf-start").value, end_date: $("#cf-end").value, commission: $("#cf-com").value, agent_ids: ids, active: isNew ? true : $("#cf-active").checked } }).then(function (res) {
+        b.disabled = false;
+        if (!res.ok) return toast(res.error, 1);
+        closeModal(); toast("✓ ተቀምጧል"); campaigns();
+      });
+    };
+  }
+  function printQr(id) {
+    api("campaign-qr/" + id).then(function (r) {
+      if (!r.cards || !r.cards.length) return toast("ለዚህ ካምፔን የተመደበ ሴልስ የለም።", 1);
+      var pa = $("#print-area");
+      pa.innerHTML = '<h2 style="font-family:var(--display);margin:0 0 4px">' + h(r.campaign.name) + "</h2><p style=\"margin:0 0 14px;color:#555\">" + h(r.campaign.location || "") + '</p><div class="qr-sheet">' +
+        r.cards.map(function (c) { return '<div class="qr-card">' + c.qr + "<b>" + h(BRAND) + " — የአሽከርካሪ ምዝገባ</b><small>ስካን ያድርጉ · ሴልስ፦ " + h(c.name) + " (" + h(c.code) + ")</small></div>"; }).join("") + "</div>";
+      modal("<h3>QR ኮዶች — " + h(r.campaign.name) + '</h3><div style="max-height:55vh;overflow:auto">' + pa.innerHTML + '</div><div class="foot"><button class="btn" data-close>ዝጋ</button><button class="btn primary" id="qr-print">🖨 አትም</button></div>');
+      $("#qr-print").onclick = function () { pa.hidden = false; closeModal(); window.print(); setTimeout(function () { pa.hidden = true; }, 500); };
+    });
+  }
+  function smsLogModal() {
+    api("sms").then(function (r) {
+      var ST = { sent: ["ተልኳል", "g"], failed: ["አልተላከም", "r"], blocked: ["ገደብ ደርሷል", "y"] };
+      modal("<h3>የተላኩ SMSዎች</h3><p class=\"hint\">በዚህ ወር " + r.used + " / " + r.limit + (r.enabled ? "" : " · SMS ጠፍቷል") + '</p><div style="max-height:60vh;overflow:auto">' +
+        (r.log.length ? "<table><thead><tr><th>ጊዜ</th><th>ለ</th><th>ዓይነት</th><th>ሁኔታ</th></tr></thead><tbody>" + r.log.map(function (l) {
+          var st = ST[l.status] || [l.status, ""];
+          return '<tr title="' + h(l.text + (l.error ? "\n" + l.error : "")) + '"><td style="white-space:nowrap">' + h(local(l.created_at)) + "</td><td>" + h(l.full_name || l.phone) + "</td><td>" + h(l.kind) + '</td><td><span class="tag ' + st[1] + '">' + h(st[0]) + "</span></td></tr>";
+        }).join("") + "</tbody></table>" : '<div class="empty">እስካሁን SMS አልተላከም።</div>') + '</div><div class="foot"><button class="btn" data-close>ዝጋ</button></div>');
+    });
+  }
 
   // ---------- settings ----------
   function settings() {
@@ -613,8 +808,9 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
         '<section class="panel"><div class="panel-head"><h3>የምዝገባ ደንቦች</h3></div><div class="body"><div class="nums">' +
           num("min_age", "ዝቅተኛ ዕድሜ", "ዓመት") + num("max_age", "ከፍተኛ ዕድሜ", "ዓመት") +
           num("max_vehicle_age", "የመኪና ዕድሜ ገደብ", "ከተመረተ ከዚህ ዓመት ያልበለጠ") + num("inspection_after_years", "የመኪና ፍተሻ", "ከዚህ ዓመት በላይ ለሆነ መኪና") +
+          num("agent_commission", "የሴልስ ኮሚሽን (መነሻ)", "ብር ለስራ ዝግጁ ለሆነ ለአንድ አሽከርካሪ — ካምፔኑ የራሱ ካልሰጠ") +
           '</div><div style="margin-top:12px"><label class="switch"><input type="checkbox" id="r-test"' + (R.test_for_no_car ? " checked" : "") + '> መኪና የሌላቸው የቃል እና የተግባር ፈተና ይወስዳሉ</label>' +
-          '<label class="switch"><input type="checkbox" id="r-orient"' + (R.require_orientation ? " checked" : "") + "> ከማግበር በፊት ስልጠና (orientation) ያስፈልጋል</label></div></div></section>" +
+          '<label class="switch"><input type="checkbox" id="r-orient"' + (R.require_orientation ? " checked" : "") + "> ለስራ ዝግጁ ከማድረግ በፊት ስልጠና (orientation) ያስፈልጋል</label></div></div></section>" +
         '<section class="panel"><div class="panel-head"><h3>የሚቀበሉ የመንጃ ፈቃድ ደረጃዎች</h3></div><div class="body"><p class="hint">ያልተመረጡ ደረጃዎች ያሏቸው አሽከርካሪዎች ቅጹን መላክ አይችሉም።</p>' +
           tog("t-grades", S0.options.grades.map(function (g) { return [g, g]; }), R.accepted_grades) +
           '<h3 style="font-family:var(--display);font-size:16px;margin:18px 0 6px">የሚቀበሉ የሰሌዳ ኮዶች</h3><p class="hint">ምንም ካልመረጡ ሁሉም ኮዶች ይቀበላሉ።</p>' +
@@ -630,7 +826,24 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
           '<p class="hint">አሽከርካሪዎች በቅጹ የመጨረሻ ደረጃ አንብበው ይቀበሉታል። ሲቀይሩት ስሪቱ ይጨምራል፤ ማን የትኛውን ስሪት እንደተቀበለ በአሽከርካሪው ገጽ ይታያል። ቋንቋ ባዶ ከሆነ አማርኛው ይታያል። ⚠️ መነሻው ረቂቅ ነው — በሕግ ባለሙያ ያስገምግሙት።</p>' +
           '<div class="ag-tabs" id="ag-tabs">' + S0.options.langs.map(function (l) { return '<button type="button" data-l="' + l + '" class="' + (l === "am" ? "on" : "") + '">' + LN[l] + (AGT[l] && AGT[l].trim() ? "" : " ·") + "</button>"; }).join("") +
           '<button type="button" id="ag-reset" style="margin-left:auto">መነሻውን ረቂቅ አስገባ</button></div><textarea class="ag-text" id="ag-text"></textarea></div></section>' +
+        smsPanel(S0) +
         '</div><div class="savebar"><span class="msg" id="set-msg">ለውጦቹ ወዲያውኑ ለአዲስ ማመልከቻዎች ይሰራሉ።</span><button class="btn primary" id="set-save">ለውጦችን አስቀምጥ</button></div>';
+      function smsPanel(S0) {
+        var m = S0.sms, KL = { submitted: "ማመልከቻ ደረሰ", docs_approved: "ሰነዶች ጸደቁ", doc_rerequest: "ሰነድ እንደገና", appt: "ቀጠሮ ተያዘ", appt_reminder: "ቀጠሮ ማስታወሻ (ከአንድ ቀን በፊት)", passed: "አለፈ", activated: "ለስራ ዝግጁ ሆነ", rejected: "ውድቅ", suspended: "ታገደ", unsuspended: "እገዳ ተነሳ", license_expiry: "የመንጃ ፈቃድ ማብቂያ", otp: "Telegram ማገናኛ ኮድ" };
+        var pct = m.monthly_limit ? Math.min(100, Math.round(S0.sms_used / m.monthly_limit * 100)) : 0;
+        return '<section class="panel wide"><div class="panel-head"><h3>SMS (AfroMessage)</h3><span style="margin-left:auto;color:var(--muted)">በዚህ ወር ' + (S0.sms_used || 0) + " / " + m.monthly_limit + "</span></div><div class=\"body\">" +
+          '<p class="hint">Telegram ለሌላቸው አሽከርካሪዎች ሁሉም መልዕክቶች፣ ለሁሉም ደግሞ የቀጠሮ ማስታወሻ በSMS ይላካሉ። ገደቡ ሲደርስ መላክ ይቆማል እና ማሳወቂያ ይመጣል።</p>' +
+          '<div class="track" style="height:6px;margin:4px 0 14px"><div class="fill" style="width:' + pct + '%;' + (pct >= 90 ? "background:var(--red)" : "") + '"></div></div>' +
+          '<label class="switch"><input type="checkbox" id="sms-on"' + (m.enabled ? " checked" : "") + "> SMS ይላክ</label>" +
+          '<div class="form-grid" style="margin-top:12px"><label>API token' + (m.token_set ? ' <small style="font-weight:400;color:var(--muted)">(ገብቷል — ለመቀየር ብቻ ይጻፉ)</small>' : "") + '<input id="sms-token" type="password" autocomplete="off" placeholder="' + (m.token_set ? "••••••••" : "ከAfroMessage ዳሽቦርድ") + '"></label>' +
+          '<label>Sender name<input id="sms-sender" value="' + h(m.sender) + '" placeholder="የጸደቀ ስም፣ ለምሳሌ CABBY"></label>' +
+          '<label>Identifier ID<input id="sms-ident" value="' + h(m.identifier) + '" placeholder="ካለ"></label>' +
+          '<label>የወር ገደብ<input id="sms-limit" type="number" min="0" value="' + h(m.monthly_limit) + '"></label></div>' +
+          '<h3 style="font-family:var(--display);font-size:16px;margin:18px 0 6px">የሚላኩ የSMS ዓይነቶች</h3>' +
+          tog("t-sms", S0.sms_kinds.filter(function (k) { return KL[k]; }).map(function (k) { return [k, KL[k]]; }), S0.sms_kinds.filter(function (k) { return m.kinds[k] !== false; })) +
+          '<div class="copy" style="margin-top:16px;max-width:420px"><input id="sms-to" placeholder="09… የሙከራ ቁጥር" style="flex:1;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:var(--r-md)"><button type="button" class="btn sm" id="sms-test">የሙከራ SMS ላክ</button></div>' +
+          '<p class="hint" style="margin-top:10px"><a href="#" id="sms-log">የተላኩ SMSዎችን እይ</a></p></div></section>';
+      }
       function num(k, label, small) { return '<label>' + h(label) + '<input type="number" data-num="' + k + '" value="' + h(R[k]) + '"><small>' + h(small) + "</small></label>"; }
       [].forEach.call(view.querySelectorAll(".toggles button"), function (b) { b.onclick = function () { if (!b.disabled) b.classList.toggle("on"); dirty(); }; });
       var ta = $("#ag-text"); ta.value = AGT.am || "";
@@ -639,7 +852,12 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
         b.onclick = function () { agLang = b.dataset.l; ta.value = AGT[agLang] || ""; ta.placeholder = agLang === "am" ? "" : "ባዶ ከሆነ ለዚህ ቋንቋ ተናጋሪዎች የአማርኛው ስምምነት ይታያል"; [].forEach.call(view.querySelectorAll("#ag-tabs [data-l]"), function (x) { x.classList.toggle("on", x === b); }); };
       });
       $("#ag-reset").onclick = function () { var d = S0.defaults.agreement[agLang] || ""; if (!d) return toast("ለዚህ ቋንቋ መነሻ ረቂቅ የለም", 1); if (window.confirm("የአሁኑን ጽሑፍ በመነሻው ረቂቅ ይተካ?")) { ta.value = d; AGT[agLang] = d; dirty(); } };
-      [].forEach.call(view.querySelectorAll("input"), function (i) { i.addEventListener("input", dirty); i.addEventListener("change", dirty); });
+      [].forEach.call(view.querySelectorAll("input"), function (i) { if (i.id !== "sms-to") { i.addEventListener("input", dirty); i.addEventListener("change", dirty); } });
+      $("#sms-test").onclick = function () {
+        var b = this; b.disabled = true;
+        api("sms/test", { method: "POST", body: { to: $("#sms-to").value } }).then(function (r) { b.disabled = false; toast(r.ok ? "✓ የሙከራ SMS ተልኳል" : "አልተላከም፦ " + r.error, !r.ok); });
+      };
+      $("#sms-log").onclick = function (e) { e.preventDefault(); smsLogModal(); };
       function dirty() { $("#set-msg").textContent = "ያልተቀመጡ ለውጦች አሉ"; }
       function picked(id, invert) { return [].filter.call(view.querySelectorAll("#" + id + " button"), function (b) { return invert ? !b.classList.contains("on") : b.classList.contains("on"); }).map(function (b) { return b.dataset.v; }); }
       $("#set-save").onclick = function () {
@@ -648,8 +866,10 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
         rules.accepted_grades = picked("t-grades"); rules.allowed_plate_codes = picked("t-plates"); rules.green_fuels = picked("t-fuels");
         rules.disabled_docs = picked("t-docs", true); rules.test_for_no_car = $("#r-test").checked; rules.require_orientation = $("#r-orient").checked;
         var links = {}; [].forEach.call(view.querySelectorAll("[data-link]"), function (i) { links[i.dataset.link] = i.value.trim(); });
+        var smsOn = picked("t-sms"), kinds = {}; S0.sms_kinds.forEach(function (k) { kinds[k] = smsOn.indexOf(k) >= 0; });
+        var sms = { enabled: $("#sms-on").checked, token: $("#sms-token").value.trim(), sender: $("#sms-sender").value.trim(), identifier: $("#sms-ident").value.trim(), monthly_limit: Number($("#sms-limit").value), kinds: kinds };
         var btn = this; btn.disabled = true;
-        api("settings", { method: "POST", body: { rules: rules, links: links, agreement: { text: AGT } } }).then(function (res) {
+        api("settings", { method: "POST", body: { rules: rules, links: links, agreement: { text: AGT }, sms: sms } }).then(function (res) {
           btn.disabled = false;
           if (!res.ok) { $("#set-msg").textContent = res.error; return toast(res.error, 1); }
           toast(res.changed.length ? "✓ ተቀምጧል፦ " + res.changed.join("፣ ") : "ምንም አልተቀየረም");
@@ -682,11 +902,11 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
   function actionButtons(d) {
     var b = [];
     if (d.status === "pending") {
-      b.push(['approve', "✅ ሰነዶች ትክክል → " + STAGE[d.next_stage], "go"], ["form:request_doc", "📎 ሰነድ እንደገና ጠይቅ"], ["form:reject", "❌ ውድቅ", "danger"], ["activate", "⏭ በቀጥታ አግብር"]);
+      b.push(['approve', "✅ ሰነዶች ትክክል → " + STAGE[d.next_stage], "go"], ["form:request_doc", "📎 ሰነድ እንደገና ጠይቅ"], ["form:reject", "❌ ውድቅ", "danger"], ["activate", "⏭ በቀጥታ ለስራ ዝግጁ አድርግ"]);
     } else if (d.status === "test" || d.status === "inspection") {
-      b.push(["form:schedule", d.appt_label ? "📅 ቀጠሮ ቀይር" : "📅 ቀጠሮ ስጥ", d.appt_label ? "" : "primary"], ["pass", d.status === "test" ? "✅ ፈተና አለፈ" : "✅ ፍተሻ አለፈ", "go"], ["form:fail", "❌ አላለፈም", "danger"], ["activate", "⏭ በቀጥታ አግብር"]);
+      b.push(["form:schedule", d.appt_label ? "📅 ቀጠሮ ቀይር" : "📅 ቀጠሮ ስጥ", d.appt_label ? "" : "primary"], ["pass", d.status === "test" ? "✅ ፈተና አለፈ" : "✅ ፍተሻ አለፈ", "go"], ["form:fail", "❌ አላለፈም", "danger"], ["activate", "⏭ በቀጥታ ለስራ ዝግጁ አድርግ"]);
     } else if (d.status === "orientation") {
-      b.push(["form:schedule", d.appt_label ? "📅 ቀጠሮ ቀይር" : "📅 የስልጠና ቀጠሮ ስጥ", d.appt_label ? "" : "primary"], ["pass", "✅ ስልጠና ወስዷል — አግብር", "go"], ["form:fail", "🚫 አልመጣም", "danger"]);
+      b.push(["form:schedule", d.appt_label ? "📅 ቀጠሮ ቀይር" : "📅 የስልጠና ቀጠሮ ስጥ", d.appt_label ? "" : "primary"], ["pass", "✅ ስልጠና ወስዷል — ለስራ ዝግጁ አድርግ", "go"], ["form:fail", "🚫 አልመጣም", "danger"]);
     } else if (d.status === "active") b.push(["form:suspend", "⛔ አግድ", "danger"]);
     else if (d.status === "suspended") { b.push(["unsuspend", "♻️ እገዳ አንሳ", "go"]); if (d.fix_state === "submitted") b.push(["form:reject_fix", "↩️ አልበቃም", "danger"]); }
     b.push(["form:message", "💬 መልዕክት ላክ"], ["form:note", "📝 ማስታወሻ"]);
@@ -725,7 +945,7 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
       b.onclick = function () {
         var a = b.dataset.act;
         if (a.indexOf("form:") === 0) { var f = $("#af-" + a.slice(5)); var on = !f.classList.contains("on"); [].forEach.call(dr.querySelectorAll(".actform"), function (x) { x.classList.remove("on"); }); f.classList.toggle("on", on); return; }
-        var confirmText = { activate: "አሽከርካሪውን አሁን ገቢር ማድረግ? (የቀሩት ደረጃዎች ይዘለላሉ)", pass: d.status === "orientation" ? "ስልጠና ወስዷል — ገቢር ይሁን?" : null }[a];
+        var confirmText = { activate: "አሽከርካሪውን አሁን ለስራ ዝግጁ ማድረግ? (የቀሩት ደረጃዎች ይዘለላሉ)", pass: d.status === "orientation" ? "ስልጠና ወስዷል — ለስራ ዝግጁ ይሁን?" : null }[a];
         if (confirmText && !window.confirm(confirmText)) return;
         act(a, {}, b);
       };
@@ -771,10 +991,13 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
       d.vehicle_mode === "other" ? row("ባለቤት", t(d.owner_name + " · " + d.owner_phone)) : "",
     ]) : g("መኪና", [row("ሁኔታ", t(O("mode", "none")) + " → የቃል እና የተግባር ፈተና")])) + g("አገልግሎት", [
       row("አገልግሎት", t(list("services", d.services))), row("የስራ ሰዓት", t(O("shift", d.shift))), row("ስልክ", t(O("phone", d.phone_type))),
+      row("ሴልስ", r.agent ? t(r.agent.name + " (" + r.agent.code + ") · " + r.agent.phone) : ""),
+      row("ካምፔን", r.campaign ? t(r.campaign.name) : ""),
+      row("ኮሚሽን", d.commission_amount != null ? t(d.commission_amount + " ብር · " + (d.commission_paid_at ? "ተከፍሏል " + local(d.commission_paid_at) : "አልተከፈለም")) : ""),
       row("የጠቆመው", r.referrer ? '<a href="#" data-id="' + r.referrer.tg_id + '">' + t(r.referrer.full_name + " " + (r.referrer.code || "")) + "</a>" : d.referral ? t(d.referral + " (አልተገኘም)") : ""),
     ]) + g("መዝገብ", [
       row("ስምምነት", d.agreement_version ? t("v" + d.agreement_version + " · " + local(d.agreement_accepted_at)) : t("አልተቀበለም (የቀድሞ ምዝገባ)")),
-      row("የተመዘገበው", t(local(d.created_at))), row("ሰነድ ያቀረበው", t(local(d.submitted_at))), row("ገቢር የሆነው", t(local(d.activated_at))), row("የመጨረሻ ውሳኔ", t(d.reviewed_by)), row("Telegram ID", t(d.tg_id)),
+      row("የተመዘገበው", t(local(d.created_at))), row("ሰነድ ያቀረበው", t(local(d.submitted_at))), row("ለስራ ዝግጁ የሆነው", t(local(d.activated_at))), row("የመጨረሻ ውሳኔ", t(d.reviewed_by)), d.no_tg ? row("Telegram", '<span class="tag">📵 የለውም — መልዕክቶች በSMS እና ለሴልሱ ይሄዳሉ</span>') : row("Telegram ID", t(d.tg_id) + (d.telegram_linked_at ? " · በኋላ ያገናኘ " + t(local(d.telegram_linked_at)) : "")),
     ]);
   }
 

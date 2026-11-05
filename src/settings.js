@@ -91,6 +91,7 @@ export async function loadSettings(env, force = false) {
     rules: { ...C.RULE_DEFAULTS, ...(all.rules ?? {}) },
     links: all.links ?? {},
     agreement: all.agreement ?? { version: 1, text: DEFAULT_AGREEMENT, updated_at: null, by: null },
+    sms: { ...C.SMS_DEFAULTS, ...(all.sms ?? {}), kinds: { ...C.SMS_DEFAULTS.kinds, ...(all.sms?.kinds ?? {}) } },
     version: Number(all.version ?? 0),
   };
   C.applySettings(cache);
@@ -123,6 +124,7 @@ export function validateSettings(input) {
     o.disabled_docs = (subset(r.disabled_docs, C.DOCUMENTS.map((d) => d.kind)) ?? []).filter((k) => !C.CORE_DOCS.includes(k));
     o.test_for_no_car = r.test_for_no_car !== false;
     o.require_orientation = r.require_orientation !== false;
+    o.agent_commission = int(r.agent_commission ?? 0, 0, 1000000); if (o.agent_commission == null) errors.push("የሴልስ ኮሚሽን ትክክለኛ ቁጥር (ብር) መሆን አለበት።");
     if (o.min_age != null && o.max_age != null && o.min_age >= o.max_age) errors.push("ዝቅተኛ ዕድሜ ከከፍተኛው ያነሰ መሆን አለበት።");
     out.rules = o;
   }
@@ -134,6 +136,18 @@ export function validateSettings(input) {
       o[k] = v;
     }
     out.links = o;
+  }
+  if (input.sms) {
+    const m = input.sms;
+    out.sms = {
+      enabled: m.enabled === true,
+      token: String(m.token ?? "").trim().slice(0, 2000),
+      sender: String(m.sender ?? "").trim().slice(0, 30),
+      identifier: String(m.identifier ?? "").trim().slice(0, 100),
+      monthly_limit: int(m.monthly_limit, 0, 1000000),
+      kinds: Object.fromEntries(C.SMS_KINDS.map((k) => [k, m.kinds?.[k] !== false])),
+    };
+    if (out.sms.monthly_limit == null) errors.push("የወር የSMS ገደብ ትክክለኛ ቁጥር መሆን አለበት።");
   }
   if (input.agreement) {
     const text = {};
@@ -153,6 +167,12 @@ export async function saveSettings(env, input, by) {
   const changed = [];
   if (value.rules && JSON.stringify(value.rules) !== JSON.stringify(cur.rules)) { put("rules", value.rules); changed.push("ደንቦች"); }
   if (value.links && JSON.stringify(value.links) !== JSON.stringify(cur.links)) { put("links", value.links); changed.push("ሊንኮች"); }
+  if (value.sms) {
+    // ቶክኑ ባዶ ከተላከ የነበረው ይቆያል
+    if (!value.sms.token || /^•+$/.test(value.sms.token)) value.sms.token = cur.sms.token;
+    if (value.sms.enabled && !value.sms.token) return { ok: false, error: "SMS ለማብራት የAfroMessage API token ያስገቡ።" };
+    if (JSON.stringify(value.sms) !== JSON.stringify(cur.sms)) { put("sms", value.sms); changed.push("SMS"); }
+  }
   if (value.agreement && JSON.stringify(value.agreement.text) !== JSON.stringify(cur.agreement.text)) {
     put("agreement", { version: (cur.agreement.version ?? 1) + 1, text: value.agreement.text, updated_at: new Date().toISOString(), by });
     changed.push(`ውል v${(cur.agreement.version ?? 1) + 1}`);
@@ -163,3 +183,6 @@ export async function saveSettings(env, input, by) {
   await env.DB.prepare("INSERT INTO events (tg_id, actor, type, detail) VALUES (NULL, ?, 'settings_changed', ?)").bind(by, changed.join("፣ ")).run();
   return { ok: true, changed, settings: await loadSettings(env, true) };
 }
+
+/** ለዳሽቦርድ — ቶክኑ አይታይም */
+export const publicSms = (sms) => ({ ...sms, token: sms.token ? "••••••••" : "", token_set: !!sms.token });

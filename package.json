@@ -9,7 +9,8 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "grammy": "^1.30.0"
+    "grammy": "^1.30.0",
+    "qrcode-generator": "^1.4.4"
   },
   "devDependencies": {
     "wrangler": "^4.45.0"

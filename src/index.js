@@ -9,6 +9,8 @@ import * as C from "./constants.js";
 import { STRINGS } from "./i18n.js";
 import FORM_HTML from "./webapp.html";
 import ADMIN_HTML from "./admin.html";
+import AGENT_HTML from "./agent.html";
+import { handleAgentApi } from "./agent-api.js";
 
 // የቅጹ ምርጫዎች — ደንቦቹ በዳሽቦርድ ስለሚቀየሩ በቅንብሮች ስሪት ይታደሳል
 const pages = new Map();
@@ -53,6 +55,7 @@ export default {
       if (path === "/") return html(page("form", FORM_HTML, brand));
       if (path === "/health") return json({ ok: missing.length === 0, missing });
       if (path === "/admin") return html(page("admin", ADMIN_HTML, brand), { "x-frame-options": "DENY" });
+      if (path === "/agent") return html(page("agent", AGENT_HTML, brand));
       if (path === "/admin/logout") return handleLogout();
     }
     if (missing.length) return json({ ok: false, missing }, 500);
@@ -73,6 +76,7 @@ export default {
     if (request.method !== "POST") return new Response("Not found", { status: 404 });
 
     if (path === "/api/me" || path === "/api/register") return handleApi(request, env, path, getBot);
+    if (path.startsWith("/api/agent/")) return handleAgentApi(request, env, path, getBot);
 
     if (path === "/webhook" || path === "/") {
       if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== env.WEBHOOK_SECRET) return new Response("Unauthorized", { status: 401 });

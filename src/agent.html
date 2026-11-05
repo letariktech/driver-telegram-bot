@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>__BRAND__ Sales</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff); --bg2: var(--tg-theme-secondary-bg-color, #f2f4f7);
+    --text: var(--tg-theme-text-color, #14213d); --hint: var(--tg-theme-hint-color, #7b8494);
+    --accent: var(--tg-theme-button-color, #1f5fbf); --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --danger: var(--tg-theme-destructive-text-color, #d64545); --green: #148a52; --signal: #b8860b;
+    --line: color-mix(in srgb, var(--hint) 22%, transparent); --r: 12px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; background: var(--bg2); color: var(--text); font: 15.5px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans Ethiopic", sans-serif; }
+  button, input, select { font: inherit; color: inherit; }
+  .top { background: var(--bg); padding: 14px 16px 0; position: sticky; top: 0; z-index: 2; border-bottom: 1px solid var(--line); }
+  .who { display: flex; align-items: center; gap: 10px; }
+  .who b { font-size: 17px; } .who small { color: var(--hint); display: block; font-size: 13px; }
+  .badge { margin-left: auto; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); }
+  .tabs { display: flex; gap: 2px; overflow-x: auto; margin-top: 10px; scrollbar-width: none; }
+  .tabs button { border: 0; background: none; padding: 10px 12px; font-weight: 600; color: var(--hint); border-bottom: 2px solid transparent; white-space: nowrap; }
+  .tabs button.on { color: var(--accent); border-color: var(--accent); }
+  main { padding: 14px 14px 40px; max-width: 620px; margin: 0 auto; }
+  .card { background: var(--bg); border-radius: var(--r); padding: 14px; margin-bottom: 12px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .stat { background: var(--bg); border-radius: var(--r); padding: 10px 12px; }
+  .stat .v { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; } .stat .k { color: var(--hint); font-size: 12.5px; }
+  .stat.money { grid-column: span 3; display: flex; justify-content: space-between; align-items: baseline; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 12px; scrollbar-width: none; }
+  .chips button { border: 1.5px solid var(--line); background: var(--bg); border-radius: 999px; padding: 6px 12px; white-space: nowrap; font-size: 14px; }
+  .chips button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .qr { background: #fff; border-radius: 16px; padding: 18px; text-align: center; color: #14213d; }
+  .qr svg { width: min(78vw, 300px); height: auto; display: block; margin: 0 auto; }
+  .qr h2 { margin: 0 0 2px; font-size: 18px; } .qr p { margin: 0 0 12px; color: #5b6577; font-size: 13.5px; }
+  .qr .code { margin-top: 10px; font-weight: 800; letter-spacing: 1px; font-size: 15px; }
+  .hint { color: var(--hint); font-size: 13.5px; margin: 10px 2px 0; text-align: center; }
+  .btn { display: block; width: 100%; border: 0; border-radius: var(--r); padding: 13px; font-weight: 700; background: var(--accent); color: var(--accent-text); text-align: center; text-decoration: none; }
+  .btn.sec { background: var(--bg); color: var(--text); border: 1.5px solid var(--line); }
+  .btn.sm { display: inline-block; width: auto; padding: 7px 12px; font-size: 13.5px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .drv { background: var(--bg); border-radius: var(--r); padding: 11px 13px; margin-bottom: 8px; }
+  .drv .t { display: flex; gap: 8px; align-items: baseline; } .drv .t b { flex: 1; }
+  .drv .s { font-size: 12.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--bg2); white-space: nowrap; }
+  .s-active { color: var(--green) !important; } .s-rejected, .s-suspended { color: var(--danger) !important; } .s-awaiting_docs { color: var(--signal) !important; }
+  .drv .m { color: var(--hint); font-size: 13px; margin-top: 2px; } .drv a { color: var(--accent); text-decoration: none; }
+  .drv .act { margin-top: 8px; }
+  .tag { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--bg2); color: var(--hint); }
+  table { width: 100%; border-collapse: collapse; background: var(--bg); border-radius: var(--r); overflow: hidden; font-size: 13.5px; }
+  th { text-align: left; color: var(--hint); font-weight: 600; padding: 8px 10px; font-size: 12px; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); } td.n { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+  input, select { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--bg); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .empty { text-align: center; color: var(--hint); padding: 30px 10px; }
+  .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px; display: none; z-index: 9; max-width: 90vw; }
+  .toast.err { background: var(--danger); color: #fff; }
+</style>
+</head>
+<body>
+<div id="app"><div class="empty">…</div></div>
+<div class="toast" id="toast"></div>
+<script>
+(function () {
+  "use strict";
+  var tg = window.Telegram && window.Telegram.WebApp;
+  var INIT = tg ? tg.initData : "";
+  if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+  var D = null, TEAM = null, tab = "qr", camp = null, filter = "all";
+  var $ = function (s) { return document.querySelector(s); };
+  function h(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function api(path, body) {
+    body = body || {}; body.initData = INIT;
+    return fetch("/api/agent/" + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (j) { j._s = r.status; return j; }); });
+  }
+  var tt; function toast(m, err) { var t = $("#toast"); t.textContent = m; t.className = "toast" + (err ? " err" : ""); t.style.display = "block"; clearTimeout(tt); tt = setTimeout(function () { t.style.display = "none"; }, 3000); }
+  function birr(n) { return (n || 0).toLocaleString("en-US") + " ብር"; }
+  function fail(msg) { document.getElementById("app").innerHTML = '<div class="empty" style="padding-top:80px"><div style="font-size:48px">🔒</div><p>' + h(msg) + "</p></div>"; }
+
+  if (!INIT) return fail("ይህ ገጽ የሚሰራው ከ__BRAND__ ቦት ውስጥ (/panel) ሲከፈት ብቻ ነው።");
+
+  function load() {
+    return api("me").then(function (r) {
+      if (r._s !== 200) return fail(r.error || "መጫን አልተቻለም");
+      D = r;
+      if (!camp || !D.campaigns.some(function (c) { return c.id === camp; })) camp = D.campaigns.length ? D.campaigns[0].id : 0;
+      render();
+    }).catch(function () { fail("የኢንተርኔት ችግር — እንደገና ይክፈቱ።"); });
+  }
+
+  function render() {
+    var sup = D.staff.role === "supervisor";
+    var tabs = [["qr", "📱 QR"], ["drivers", "👥 አሽከርካሪዎቼ"], ["new", "➕ መዝግብ"]];
+    if (sup) tabs.push(["team", "🧑‍💼 ቡድን"], ["campaigns", "📣 ካምፔኖች"]);
+    document.getElementById("app").innerHTML =
+      '<div class="top"><div class="who"><div><b>' + h(D.staff.name) + "</b><small>" + h(D.staff.code) + " · " + (sup ? "ቡድን መሪ" : "ሴልስ") + '</small></div><span class="badge">' + h(D.brand) + " Sales</span></div>" +
+      '<div class="tabs">' + tabs.map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (tab === t[0] ? "on" : "") + '">' + t[1] + "</button>"; }).join("") + "</div></div><main id=\"main\"></main>";
+    [].forEach.call(document.querySelectorAll("[data-tab]"), function (b) { b.onclick = function () { tab = b.dataset.tab; render(); }; });
+    ({ qr: qrTab, drivers: driversTab, "new": newTab, team: teamTab, campaigns: campaignsTab })[tab]();
+  }
+
+  function statsHtml(s) {
+    return '<div class="stats"><div class="stat"><div class="v">' + s.started + '</div><div class="k">ጀመሩ</div></div>' +
+      '<div class="stat"><div class="v">' + s.submitted + '</div><div class="k">ሰነድ አቀረቡ</div></div>' +
+      '<div class="stat"><div class="v">' + s.activated + '</div><div class="k">ለስራ ዝግጁ ሆኑ</div></div>' +
+      '<div class="stat money"><div><div class="k">ኮሚሽን (ለስራ ዝግጁ ሲሆኑ)</div><div class="v">' + birr(s.earned) + '</div></div><div style="text-align:right"><div class="k">ያልተከፈለ</div><div class="v" style="font-size:17px">' + birr(s.unpaid) + "</div></div></div></div>";
+  }
+
+  function qrTab() {
+    var m = $("#main");
+    var c = D.campaigns.find(function (x) { return x.id === camp; });
+    var q = c || D.general;
+    m.innerHTML = (D.campaigns.length > 1 ? '<div class="chips">' + D.campaigns.map(function (x) { return '<button data-c="' + x.id + '" class="' + (x.id === camp ? "on" : "") + '">' + h(x.name) + "</button>"; }).join("") + "</div>" : "") +
+      '<div class="qr"><h2>' + h(c ? c.name : "የ" + D.brand + " አሽከርካሪዎች ምዝገባ") + "</h2><p>" + h(c ? [c.location, c.start_date && c.end_date ? c.start_date + " — " + c.end_date : ""].filter(Boolean).join(" · ") : "ካምፔን አልተመደበልዎትም — ምዝገባው በስምዎ ብቻ ይመዘገባል") + "</p>" +
+      q.qr + '<div class="code">' + h(D.staff.code) + (c ? " · " + birr(c.commission) + " ለስራ ዝግጁ ለሆነ ለእያንዳንዱ" : "") + "</div></div>" +
+      '<p class="hint">አሽከርካሪው በስልኩ ካሜራ ይህን ይስካን ያድርግ — ቦቱ ይከፈትና በራሱ ይመዘገባል፤ ምዝገባው በስምዎ ይቆጠራል።</p>' +
+      '<div class="row2"><a class="btn sec" href="https://t.me/share/url?url=' + encodeURIComponent(q.link) + "&text=" + encodeURIComponent("የ" + D.brand + " አሽከርካሪዎች ምዝገባ") + '">↗️ ሊንኩን ላክ</a><button class="btn sec" id="copy">📋 ሊንኩን ቅዳ</button></div>' +
+      '<div style="margin-top:14px">' + statsHtml(c ? c.mine : D.stats) + "</div>";
+    [].forEach.call(m.querySelectorAll("[data-c]"), function (b) { b.onclick = function () { camp = Number(b.dataset.c); qrTab(); }; });
+    $("#copy").onclick = function () { (navigator.clipboard ? navigator.clipboard.writeText(q.link) : Promise.reject()).then(function () { toast("✓ ተቀድቷል"); }, function () { toast(q.link); }); };
+  }
+
+  var FILTERS = [["all", "ሁሉም"], ["docs", "ሰነድ ያልጨረሱ"], ["progress", "በሂደት ላይ"], ["active", "ለስራ ዝግጁ"], ["problem", "ውድቅ/ታግደዋል"]];
+  function pass(d) {
+    if (filter === "docs") return d.status === "awaiting_docs";
+    if (filter === "progress") return ["pending", "test", "inspection", "orientation"].indexOf(d.status) >= 0;
+    if (filter === "active") return d.status === "active";
+    if (filter === "problem") return d.status === "rejected" || d.status === "suspended";
+    return true;
+  }
+  function driverCard(d, extra) {
+    return '<div class="drv"><div class="t"><b>' + h(d.full_name) + '</b><span class="s s-' + h(d.status) + '">' + h(d.status_label.replace(/^\S+\s/, "")) + "</span></div>" +
+      '<div class="m"><a href="tel:' + h(d.phone) + '">📞 ' + h(d.phone) + "</a>" + (d.no_tg ? ' · <span class="tag">📵 Telegram የለውም</span>' : "") + (d.code ? " · " + h(d.code) : "") + (extra || "") + "</div>" +
+      '<div class="m">→ ' + h(d.next) + (d.appt ? " · 📅 " + h(d.appt) : "") + (d.reason ? " · " + h(d.reason) : "") + "</div>" +
+      (d.commission ? '<div class="m">💰 ' + birr(d.commission) + (d.commission_paid ? " · ተከፍሏል ✓" : " · ያልተከፈለ") + "</div>" : "") +
+      (d.no_tg && d.status === "awaiting_docs" && !extra ? '<div class="act"><button class="btn sm" data-collect="' + d.tg_id + '">📎 ሰነዶቹን በቻት ላክ</button></div>' : "") + "</div>";
+  }
+  function driversTab() {
+    var m = $("#main");
+    var rows = D.drivers.filter(pass);
+    m.innerHTML = '<div class="chips">' + FILTERS.map(function (f) { return '<button data-f="' + f[0] + '" class="' + (filter === f[0] ? "on" : "") + '">' + f[1] + "</button>"; }).join("") + "</div>" +
+      (rows.length ? rows.map(function (d) { return driverCard(d); }).join("") : '<div class="empty">እዚህ ምንም የለም።</div>');
+    [].forEach.call(m.querySelectorAll("[data-f]"), function (b) { b.onclick = function () { filter = b.dataset.f; driversTab(); }; });
+    [].forEach.call(m.querySelectorAll("[data-collect]"), function (b) {
+      b.onclick = function () {
+        b.disabled = true;
+        api("collect", { id: Number(b.dataset.collect) }).then(function (r) {
+          b.disabled = false;
+          if (r.ok) { toast("✓ ቦቱ ቀጣዩን ሰነድ በቻት ጠይቋል"); setTimeout(function () { try { tg.close(); } catch (e) {} }, 900); } else toast(r.error, 1);
+        });
+      };
+    });
+  }
+
+  function newTab() {
+    var m = $("#main");
+    m.innerHTML = '<div class="card"><b>📱 አሽከርካሪው Telegram ካለው</b><p style="color:var(--hint);margin:6px 0 12px">QR ኮድዎን ያሳዩት — በራሱ ስልክ ይመዘገባል፤ ማሳወቂያዎችም ለራሱ ይደርሱታል። ይህ ይመረጣል።</p><button class="btn sec" id="go-qr">QR ኮዴን አሳይ</button></div>' +
+      '<div class="card"><b>📵 አሽከርካሪው Telegram ከሌለው</b><p style="color:var(--hint);margin:6px 0 12px">መረጃውን እርስዎ ይሞላሉ፤ ሰነዶቹን ፎቶ አንስተው በቦት ቻትዎ ይልካሉ። ውሳኔዎችና ቀጠሮዎች በSMS ለአሽከርካሪው፣ ቅጂያቸው ለእርስዎ ይደርሳሉ።</p>' +
+      (D.campaigns.length ? '<label>ካምፔን</label><select id="nc">' + D.campaigns.map(function (c) { return '<option value="' + c.id + '"' + (c.id === camp ? " selected" : "") + ">" + h(c.name) + "</option>"; }).join("") + "</select>" : "") +
+      '<button class="btn" id="go-form" style="margin-top:12px">➕ አሽከርካሪ መዝግብ</button></div>';
+    $("#go-qr").onclick = function () { tab = "qr"; render(); };
+    $("#go-form").onclick = function () { var c = $("#nc") ? $("#nc").value : ""; location.href = "/?agent=1&c=" + encodeURIComponent(c); };
+  }
+
+  // ---------- ቡድን መሪ ----------
+  function loadTeam() { return api("team").then(function (r) { if (r._s !== 200) { toast(r.error, 1); return null; } TEAM = r; return r; }); }
+  function teamTab() {
+    var m = $("#main"); m.innerHTML = '<div class="empty">…</div>';
+    loadTeam().then(function (r) {
+      if (!r) return;
+      var agents = r.team.filter(function (s) { return s.active; });
+      var tot = agents.reduce(function (a, s) { a.s += s.started; a.b += s.submitted; a.a += s.activated; a.u += s.unpaid; return a; }, { s: 0, b: 0, a: 0, u: 0 });
+      m.innerHTML = '<div class="stats"><div class="stat"><div class="v">' + tot.s + '</div><div class="k">ጀመሩ</div></div><div class="stat"><div class="v">' + tot.b + '</div><div class="k">ሰነድ አቀረቡ</div></div><div class="stat"><div class="v">' + tot.a + '</div><div class="k">ለስራ ዝግጁ</div></div></div>' +
+        "<table><thead><tr><th>ሴልስ</th><th style='text-align:right'>ጀመሩ</th><th style='text-align:right'>ሰነድ</th><th style='text-align:right'>ለስራ ዝግጁ</th><th style='text-align:right'>%</th></tr></thead><tbody>" +
+        agents.map(function (s) {
+          var pct = s.started ? Math.round(s.activated / s.started * 100) : 0;
+          return "<tr data-agent='" + s.id + "'><td><b>" + h(s.name) + "</b><div style='color:var(--hint);font-size:12px'>" + h(s.code) + (s.linked ? "" : " · ⚠️ አልገባም") + (s.role === "supervisor" ? " · መሪ" : "") + "</div></td><td class='n'>" + s.started + "</td><td class='n'>" + s.submitted + "</td><td class='n'>" + s.activated + "</td><td class='n'>" + pct + "%</td></tr>";
+        }).join("") + "</tbody></table><p class='hint'>ስም ሲጫኑ የዚያ ሴልስ አሽከርካሪዎች ይታያሉ።</p><div id='ad'></div>";
+      [].forEach.call(m.querySelectorAll("[data-agent]"), function (tr) {
+        tr.onclick = function () {
+          var id = Number(tr.dataset.agent), s = r.team.find(function (x) { return x.id === id; });
+          var list = r.drivers.filter(function (d) { return d.agent_id === id; });
+          $("#ad").innerHTML = "<h3 style='margin:16px 2px 8px'>" + h(s.name) + " · " + list.length + "</h3>" + (list.length ? list.map(function (d) { return driverCard(d, " "); }).join("") : '<div class="empty">ምንም የለም</div>');
+          $("#ad").scrollIntoView({ behavior: "smooth" });
+        };
+      });
+    });
+  }
+
+  function campaignsTab() {
+    var m = $("#main"); m.innerHTML = '<div class="empty">…</div>';
+    loadTeam().then(function (r) {
+      if (!r) return;
+      m.innerHTML = '<button class="btn" id="newc">➕ አዲስ ካምፔን</button><div id="cform"></div><div style="margin-top:12px">' +
+        (r.campaigns.length ? r.campaigns.map(function (c) {
+          return '<div class="drv" data-edit="' + c.id + '"><div class="t"><b>' + h(c.name) + '</b><span class="s ' + (c.active ? "s-active" : "") + '">' + (c.active ? "ንቁ" : "ተዘግቷል") + '</span></div><div class="m">' +
+            h([c.location, c.start_date && (c.start_date + (c.end_date ? " — " + c.end_date : ""))].filter(Boolean).join(" · ")) + '</div><div class="m">' + c.agent_ids.length + " ሴልሶች · ጀመሩ " + c.started + " · ሰነድ " + c.submitted + " · ለስራ ዝግጁ " + c.activated + " · " + birr(c.commission != null ? c.commission : r.default_commission) + "/ለስራ ዝግጁ</div></div>";
+        }).join("") : '<div class="empty">እስካሁን ካምፔን የለም።</div>') + "</div>";
+      $("#newc").onclick = function () { form({}); };
+      [].forEach.call(m.querySelectorAll("[data-edit]"), function (el) { el.onclick = function () { form(r.campaigns.find(function (c) { return c.id === Number(el.dataset.edit); })); }; });
+      function form(c) {
+        var sel = (c.agent_ids || []).slice();
+        $("#cform").innerHTML = '<div class="card" style="margin-top:12px"><b>' + (c.id ? "ካምፔን ቀይር" : "አዲስ ካምፔን") + "</b>" +
+          '<label>ስም</label><input id="c-name" value="' + h(c.name || "") + '" placeholder="ለምሳሌ መገናኛ — ኅዳር 10">' +
+          '<label>ቦታ</label><input id="c-loc" value="' + h(c.location || "") + '" placeholder="ለምሳሌ መገናኛ፣ ከ22 ማዞሪያ አጠገብ">' +
+          '<div class="grid2"><div><label>ከ</label><input type="date" id="c-start" value="' + h(c.start_date || "") + '"></div><div><label>እስከ</label><input type="date" id="c-end" value="' + h(c.end_date || "") + '"></div></div>' +
+          '<label>ኮሚሽን ለስራ ዝግጁ ለሆነ ለእያንዳንዱ አሽከርካሪ (ብር)</label><input type="number" id="c-com" min="0" value="' + h(c.commission != null ? c.commission : "") + '" placeholder="ባዶ = መነሻው (' + r.default_commission + ' ብር)">' +
+          '<label>ሴልሶች</label><div class="chips" style="flex-wrap:wrap">' + r.team.filter(function (s) { return s.active; }).map(function (s) { return '<button type="button" data-a="' + s.id + '" class="' + (sel.indexOf(s.id) >= 0 ? "on" : "") + '">' + h(s.name) + "</button>"; }).join("") + "</div>" +
+          (c.id ? '<label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="c-act" style="width:auto"' + (c.active ? " checked" : "") + "> ንቁ</label>" : "") +
+          '<button class="btn" id="c-save" style="margin-top:12px">አስቀምጥ</button></div>';
+        [].forEach.call(document.querySelectorAll("#cform [data-a]"), function (b) { b.onclick = function () { b.classList.toggle("on"); }; });
+        $("#cform").scrollIntoView({ behavior: "smooth" });
+        $("#c-save").onclick = function () {
+          var ids = [].map.call(document.querySelectorAll("#cform [data-a].on"), function (b) { return Number(b.dataset.a); });
+          api("campaign", { campaign: { id: c.id, name: $("#c-name").value, location: $("#c-loc").value, start_date: $("#c-start").value, end_date: $("#c-end").value, commission: $("#c-com").value, agent_ids: ids, active: $("#c-act") ? $("#c-act").checked : true } })
+            .then(function (res) { if (res.ok) { toast("✓ ተቀምጧል"); load().then(function () { tab = "campaigns"; render(); }); } else toast(res.error, 1); });
+        };
+      }
+    });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

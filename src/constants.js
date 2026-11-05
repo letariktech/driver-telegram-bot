@@ -12,8 +12,11 @@ export const RULE_DEFAULTS = {
   green_fuels: ["hybrid", "electric"],
   disabled_docs: [],            // የማይጠየቁ ሰነዶች
   test_for_no_car: true,        // መኪና የሌላቸው የቃል እና የተግባር ፈተና
-  require_orientation: true,    // ከማግበር በፊት ስልጠና
+  require_orientation: true,    // ለስራ ዝግጁ ከማድረግ በፊት ስልጠና
+  agent_commission: 0,          // ለሴልስ የመነሻ ኮሚሽን (ብር) — ካምፔኑ የራሱ ከሌለው
 };
+export const SMS_KINDS = ["submitted", "docs_approved", "doc_rerequest", "appt", "passed", "activated", "rejected", "suspended", "unsuspended", "license_expiry", "appt_reminder", "otp"];
+export const SMS_DEFAULTS = { enabled: false, token: "", sender: "", identifier: "", monthly_limit: 2000, kinds: Object.fromEntries(SMS_KINDS.map((k) => [k, true])) };
 export const LINK_KEYS = ["SHARE_ANDROID_URL", "SHARE_IOS_URL", "RESERVE_ANDROID_URL", "RESERVE_IOS_URL", "DRIVER_GROUP_LINK", "SUPPORT_CONTACT", "REFERRAL_REWARD"];
 
 // በእያንዳንዱ ጥያቄ ከዳታቤዝ ይሞላሉ (applySettings)
@@ -28,6 +31,7 @@ export let DISABLED_DOCS = [];
 export let TEST_FOR_NO_CAR = true;
 export let REQUIRE_ORIENTATION = true;
 export let LINKS = {};
+export let AGENT_COMMISSION = 0;
 export let SETTINGS_VERSION = 0;
 
 export function applySettings({ rules = {}, links = {}, version = 0 } = {}) {
@@ -36,6 +40,7 @@ export function applySettings({ rules = {}, links = {}, version = 0 } = {}) {
   ACCEPTED_GRADES = r.accepted_grades; ALLOWED_PLATE_CODES = r.allowed_plate_codes?.length ? r.allowed_plate_codes : null;
   GREEN_FUELS = r.green_fuels; DISABLED_DOCS = r.disabled_docs ?? []; TEST_FOR_NO_CAR = r.test_for_no_car !== false; REQUIRE_ORIENTATION = r.require_orientation !== false;
   LINKS = links ?? {};
+  AGENT_COMMISSION = Number(r.agent_commission) || 0;
   SETTINGS_VERSION = version;
 }
 /** ቅንብሮች ውስጥ ያለ ሊንክ፣ ከሌለ የwrangler.toml እሴት */

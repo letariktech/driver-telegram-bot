@@ -89,6 +89,7 @@
   <form id="form" hidden novalidate>
     <div class="top"><div class="brand">🚖 __BRAND__ Driver</div><div class="langs" id="langs"></div></div>
     <div class="banner" id="susp-banner" hidden data-t="suspended_edit"></div>
+    <div class="banner" id="agent-banner" hidden style="background:color-mix(in srgb, var(--accent) 12%, var(--bg));color:var(--accent)">👤 Telegram ለሌለው አሽከርካሪ እየመዘገቡ ነው። ቋንቋው አሽከርካሪው SMS የሚቀበልበት ነው።</div>
     <div class="steps"></div>
     <div class="kicker" id="kicker"></div>
     <h1 id="title"></h1>
@@ -186,6 +187,7 @@
   var O = __OPTIONS__, BRAND = "__BRAND__";
   O.AC = ["yes", "no"];
   var tg = window.Telegram && window.Telegram.WebApp;
+  var QS = new URLSearchParams(location.search), AGENT = QS.get("agent") === "1", AGENT_CAMP = Number(QS.get("c")) || null;
   var $ = function (id) { return document.getElementById(id); };
   var $$ = function (s) { return [].slice.call(document.querySelectorAll(s)); };
   var sections = $$("section");
@@ -396,11 +398,13 @@
   function submit() {
     busy = true;
     if (useMain) tg.MainButton.showProgress(false); else $("fb-next").disabled = true;
-    api("/api/register", { profile: profile(), lang: lang, agree: AG.version }).then(function (res) {
+    var url = AGENT ? "/api/agent/register" : "/api/register";
+    api(url, { profile: profile(), lang: lang, agree: AG.version, campaign_id: AGENT_CAMP }).then(function (res) {
       if (!res.ok) throw new Error(res.error || F("e_network"));
       haptic("success");
       try { tg.disableClosingConfirmation(); } catch (e) {}
-      if (res.suspended) message("✅", F("ok_title"), F("locked_text")); else message("✅", F("ok_title"), F("ok_text"));
+      if (AGENT) message("✅", "አሽከርካሪው ተመዝግቧል", "ወደ ቦት ቻቱ ይመለሱ እና የአሽከርካሪውን ሰነዶች ፎቶ አንስተው አንድ በአንድ ይላኩ።");
+      else if (res.suspended) message("✅", F("ok_title"), F("locked_text")); else message("✅", F("ok_title"), F("ok_text"));
       setTimeout(function () { if (tg) tg.close(); }, 2500);
     }).catch(function (e) { $("error").textContent = e.message || F("e_network"); haptic("error"); })
       .then(function () { busy = false; if (useMain) tg.MainButton.hideProgress(); else $("fb-next").disabled = false; });
@@ -430,6 +434,18 @@
   tg.ready(); tg.expand();
   try { tg.enableClosingConfirmation(); } catch (e) {}
 
+  if (AGENT) {
+    $("agent-banner").hidden = false;
+    $("referral").closest(".field").hidden = true;
+    api("/api/agent/me", {}).then(function (res) {
+      if (res._status !== 200) return message("🔒", "ሴልስ ብቻ", res.error || "");
+      AG = { version: res.agreement.version, texts: { am: res.agreement.text } };
+      applyLang();
+      $$("[data-t=agree]").forEach(function (el) { el.textContent = "አሽከርካሪው የ" + BRAND + " የአሽከርካሪ ስምምነትን አንብቦ (ወይም ተነቦለት) ተስማምቷል።"; });
+      show("form"); render();
+    }).catch(function () { message("📡", F("e_network"), ""); });
+    return;
+  }
   api("/api/me", {}).then(function (res) {
     if (res._status === 401) return message("🔒", F("open_tg_title"), res.error || "");
     if (res.lang && O.I18N[res.lang]) { lang = res.lang; applyLang(); }

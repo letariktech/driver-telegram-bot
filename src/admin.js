@@ -5,7 +5,9 @@ import * as db from "./db.js";
 import * as A from "./actions.js";
 import { STRINGS, t } from "./i18n.js";
 import { signToken, verifyToken, verifyInitData } from "./auth.js";
-import { loadSettings, saveSettings, DEFAULT_AGREEMENT } from "./settings.js";
+import { loadSettings, saveSettings, DEFAULT_AGREEMENT, publicSms } from "./settings.js";
+import { botName, qrSvg, campaignInput } from "./agent-api.js";
+import { sendSms } from "./sms.js";
 
 const COOKIE = "cabby_admin";
 const SESSION_DAYS = 7;
@@ -68,6 +70,7 @@ function view(d) {
     appt_label: A.apptText(d, "am") || null,
     waiting_days: Math.max(0, Math.floor((Date.now() - Date.parse(`${d.updated_at}Z`)) / 86400000)),
     required_docs: C.requiredDocs(d).map((x) => x.kind),
+    no_tg: db.isNoTg(d.tg_id),
   };
 }
 
@@ -77,7 +80,7 @@ const card = (d) => {
     tg_id: v.tg_id, code: v.code, full_name: v.full_name, phone: v.phone, status: v.status, green: v.green,
     vehicle_mode: v.vehicle_mode, vehicle: v.has_vehicle ? [v.vehicle_make !== "other" ? v.vehicle_make : "", v.vehicle_model, v.vehicle_year].filter(Boolean).join(" ") : null,
     services: v.services, appt_label: v.appt_label, appt_at: v.appt_at, appt_confirmed: v.appt_confirmed, waiting_days: v.waiting_days,
-    updated_at: v.updated_at, next_stage: v.next_stage, sub_city: v.sub_city,
+    updated_at: v.updated_at, next_stage: v.next_stage, sub_city: v.sub_city, no_tg: v.no_tg, agent_id: v.agent_id,
   };
 };
 
@@ -124,6 +127,13 @@ const ACTIONS = {
   message: async (env, api, id, who, b) => {
     const text = String(b.text ?? "").trim().slice(0, 2000);
     if (!text) return { ok: false, error: "መልዕክቱ ባዶ ነው።" };
+    if (db.isNoTg(id)) {
+      const d = await db.getDriver(env.DB, id);
+      const r = await sendSms(env, { to: d.phone, text: `${A.brand(env)}: ${text}`.slice(0, 480), kind: "message", tg_id: id });
+      if (!r.ok) return { ok: false, error: r.skipped === "disabled" ? "SMS አልበራም — በቅንብሮች ያብሩት።" : `SMS አልተላከም፦ ${r.error ?? r.skipped}` };
+      await db.logEvent(env.DB, id, who, "message", `SMS፦ ${text}`);
+      return { ok: true };
+    }
     const err = await api.sendMessage(id, `💬 <b>${A.esc(A.brand(env))}፦</b>\n${A.esc(text)}`, A.HTML).then(() => null).catch((e) => e.description ?? e.message);
     if (err) return { ok: false, error: `መላክ አልተቻለም፦ ${err}` };
     await db.logEvent(env.DB, id, who, "message", text);
@@ -167,7 +177,7 @@ export async function handleAdminApi(request, env, path, getBot) {
         });
       }
       case "drivers": {
-        const r = await db.searchDrivers(DB, { q: q("q"), status: q("status"), service: q("service"), mode: q("mode"), fuel: q("fuel"), sort: q("sort"), limit: Math.min(Number(q("limit") ?? 50), 200), offset: Number(q("offset") ?? 0) });
+        const r = await db.searchDrivers(DB, { q: q("q"), status: q("status"), service: q("service"), mode: q("mode"), fuel: q("fuel"), agent: q("agent"), campaign: q("campaign"), sort: q("sort"), limit: Math.min(Number(q("limit") ?? 50), 200), offset: Number(q("offset") ?? 0) });
         return json({ total: r.total, rows: r.rows.map(card) });
       }
       case "driver": {
@@ -177,7 +187,9 @@ export async function handleAdminApi(request, env, path, getBot) {
         const [docs, events, referred, referrer] = await Promise.all([
           db.getDocs(DB, id), db.eventsFor(DB, id, 80), db.referredBy(DB, id), d.referrer_id ? db.getDriver(DB, d.referrer_id) : null,
         ]);
-        return json({ driver: view(d), docs, events, referred: referred.map(card), referrer: referrer ? card(referrer) : null });
+        const [agent, campaign] = await Promise.all([d.agent_id ? db.staffById(DB, d.agent_id) : null, d.campaign_id ? db.campaignById(DB, d.campaign_id) : null]);
+        return json({ driver: view(d), docs, events, referred: referred.map(card), referrer: referrer ? card(referrer) : null,
+          agent: agent && { id: agent.id, name: agent.name, code: agent.code, phone: agent.phone }, campaign: campaign && { id: campaign.id, name: campaign.name } });
       }
       case "file":
         return proxyFile(env, decodeURIComponent(seg.slice(1).join("/")));
@@ -196,6 +208,7 @@ export async function handleAdminApi(request, env, path, getBot) {
         const st = await loadSettings(env, true);
         return json({
           ...st,
+          sms: publicSms(st.sms), sms_kinds: C.SMS_KINDS, sms_used: await db.smsMonthCount(DB),
           defaults: { rules: C.RULE_DEFAULTS, agreement: DEFAULT_AGREEMENT },
           env_links: Object.fromEntries(C.LINK_KEYS.map((k) => [k, env[k] || ""])),
           options: {
@@ -203,6 +216,39 @@ export async function handleAdminApi(request, env, path, getBot) {
             docs: C.DOCUMENTS.map((d) => ({ kind: d.kind, label: t("am", `docs.${d.kind}`)[0], core: C.CORE_DOCS.includes(d.kind), when: d.when ? (d.kind === "authorization" ? "other" : "car") : "all" })),
           },
         });
+      }
+      case "staff": {
+        const [list, bot] = await Promise.all([db.staffList(DB), botName(env, getBot)]);
+        return json({ staff: list.map((x) => ({ ...x, invite_link: x.invite_token ? `https://t.me/${bot}?start=staff_${x.invite_token}` : null, invite_token: undefined })) });
+      }
+      case "campaigns": {
+        const [list, staff] = await Promise.all([db.campaignList(DB), db.staffList(DB)]);
+        return json({ campaigns: list, staff: staff.filter((x) => x.active).map((x) => ({ id: x.id, name: x.name, code: x.code, role: x.role })), default_commission: C.AGENT_COMMISSION });
+      }
+      case "campaign-qr": {
+        const c = await db.campaignById(DB, Number(seg[1]));
+        if (!c) return json({ error: "not found" }, 404);
+        const bot = await botName(env, getBot);
+        const agents = (await db.staffList(DB)).filter((x) => x.active);
+        const assigned = (await db.campaignList(DB)).find((x) => x.id === c.id)?.agent_ids ?? [];
+        return json({ campaign: c, cards: agents.filter((x) => assigned.includes(x.id)).map((x) => {
+          const link = `https://t.me/${bot}?start=a_${x.code}_${c.id}`;
+          return { name: x.name, code: x.code, link, qr: qrSvg(link) };
+        }) });
+      }
+      case "commissions": {
+        const rows = await db.commissions(DB);
+        const byAgent = {};
+        for (const r of rows) {
+          const a = (byAgent[r.agent_id] ??= { agent_id: r.agent_id, name: r.agent_name, code: r.agent_code, telebirr: r.agent_telebirr || r.agent_phone, total: 0, unpaid: 0, count: 0, unpaid_count: 0 });
+          a.total += r.commission_amount; a.count++;
+          if (!r.commission_paid_at) { a.unpaid += r.commission_amount; a.unpaid_count++; }
+        }
+        return json({ rows, agents: Object.values(byAgent).sort((a, b) => b.unpaid - a.unpaid) });
+      }
+      case "sms": {
+        const [log, used, st] = await Promise.all([db.smsLog(DB, 100), db.smsMonthCount(DB), loadSettings(env)]);
+        return json({ log, used, limit: st.sms.monthly_limit, enabled: st.sms.enabled });
       }
       case "export.csv": {
         const csv = await toCsv(env);
@@ -220,6 +266,60 @@ export async function handleAdminApi(request, env, path, getBot) {
       const res = await ACTIONS[seg[2]](env, getBot(env).api, id, `${who.name} (ዳሽቦርድ)`, body);
       const d = await db.getDriver(DB, id);
       return json({ ...res, driver: view(d) }, res.ok ? 200 : 409);
+    }
+    if (seg[0] === "staff") {
+      if (seg[2] === "invite") {
+        const token = crypto.randomUUID().replace(/-/g, "");
+        await DB.prepare("UPDATE staff SET invite_token = ?, tg_id = NULL, username = NULL WHERE id = ?").bind(token, Number(seg[1])).run();
+        return json({ ok: true, invite_link: `https://t.me/${await botName(env, getBot)}?start=staff_${token}` });
+      }
+      const name = String(body.name ?? "").trim().slice(0, 80);
+      const phone = C.normalizePhone(body.phone);
+      const telebirr = body.telebirr ? C.normalizePhone(body.telebirr) : phone;
+      const role = body.role === "supervisor" ? "supervisor" : "agent";
+      if (name.length < 2) return json({ error: "ስም ያስገቡ።" }, 422);
+      if (!phone) return json({ error: "ትክክለኛ ስልክ ቁጥር ያስገቡ።" }, 422);
+      if (body.telebirr && !telebirr) return json({ error: "ትክክለኛ የTelebirr ቁጥር ያስገቡ።" }, 422);
+      if (body.id) {
+        await DB.prepare("UPDATE staff SET name = ?, phone = ?, telebirr = ?, role = ?, active = ? WHERE id = ?").bind(name, phone, telebirr, role, body.active === false ? 0 : 1, Number(body.id)).run();
+        await db.logEvent(DB, null, who.name, "staff_saved", `${name} (ተቀይሯል)`);
+        return json({ ok: true });
+      }
+      const token = crypto.randomUUID().replace(/-/g, "");
+      const r = await DB.prepare("INSERT INTO staff (name, phone, telebirr, role, invite_token) VALUES (?, ?, ?, ?, ?) RETURNING id").bind(name, phone, telebirr, role, token).first();
+      const code = `S${String(r.id).padStart(2, "0")}`;
+      await DB.prepare("UPDATE staff SET code = ? WHERE id = ?").bind(code, r.id).run();
+      await db.logEvent(DB, null, who.name, "staff_saved", `${name} (${code}, አዲስ)`);
+      return json({ ok: true, id: r.id, code, invite_link: `https://t.me/${await botName(env, getBot)}?start=staff_${token}` });
+    }
+    if (seg[0] === "campaigns") {
+      const v = await campaignInput(env, body);
+      if (v.error) return json({ error: v.error }, 422);
+      const id = await db.saveCampaign(DB, v.value, who.name);
+      await db.logEvent(DB, null, who.name, "campaign_saved", `${v.value.name}${v.value.id ? " (ተቀይሯል)" : " (አዲስ)"}`);
+      return json({ ok: true, id });
+    }
+    if (seg[0] === "commission" && seg[2] === "paid") {
+      const r = await DB.prepare("UPDATE drivers SET commission_paid_at = datetime('now') WHERE tg_id = ? AND commission_amount IS NOT NULL AND commission_paid_at IS NULL").bind(Number(seg[1])).run();
+      if (!r.meta.changes) return json({ ok: false, error: "ቀድሞ ተከፍሏል።" }, 409);
+      await db.logEvent(DB, Number(seg[1]), who.name, "commission_paid");
+      return json({ ok: true });
+    }
+    if (seg[0] === "commissions" && seg[1] === "agent" && seg[3] === "paid") {
+      const sid = Number(seg[2]);
+      const sum = await DB.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(commission_amount), 0) AS s FROM drivers WHERE agent_id = ? AND commission_amount IS NOT NULL AND commission_paid_at IS NULL").bind(sid).first();
+      if (!sum.n) return json({ ok: false, error: "የሚከፈል የለም።" }, 409);
+      await DB.prepare("UPDATE drivers SET commission_paid_at = datetime('now') WHERE agent_id = ? AND commission_amount IS NOT NULL AND commission_paid_at IS NULL").bind(sid).run();
+      const st = await db.staffById(DB, sid);
+      await db.logEvent(DB, null, who.name, "commission_paid", `${st?.name ?? sid}፦ ${sum.n} አሽከርካሪዎች · ${sum.s} ብር`);
+      if (st?.tg_id) await getBot(env).api.sendMessage(st.tg_id, `💰 የ<b>${sum.s} ብር</b> ኮሚሽን (${sum.n} አሽከርካሪዎች) ተከፍሎዎታል። እናመሰግናለን!`, A.HTML).catch(() => {});
+      return json({ ok: true, count: sum.n, total: sum.s });
+    }
+    if (seg[0] === "sms" && seg[1] === "test") {
+      const to = C.normalizePhone(body.to);
+      if (!to) return json({ ok: false, error: "ትክክለኛ ስልክ ቁጥር ያስገቡ።" }, 422);
+      const r = await sendSms(env, { to, text: `${A.brand(env)}: የሙከራ SMS ✓`, kind: "test", force: true });
+      return json(r.ok ? { ok: true } : { ok: false, error: r.error ?? r.skipped }, r.ok ? 200 : 502);
     }
     if (seg[0] === "settings") {
       const res = await saveSettings(env, body, who.name);

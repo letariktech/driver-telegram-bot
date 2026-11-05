@@ -157,9 +157,22 @@ export async function handleApi(request, env, path, getBot) {
   profile.referrer_id = ref?.tg_id ?? existing?.referrer_id ?? null;
   if (!profile.referral && prefs?.ref_code) profile.referral = prefs.ref_code;
 
+  // በሴልስ QR የመጣ — ሴልሱ እና ካምፔኑ ይመዘገባሉ፤ የአሽከርካሪ ጥቆማ ሽልማት አይከፈልም
+  let agentId = existing?.agent_id ?? null, campaignId = existing?.campaign_id ?? null;
+  if (!agentId && prefs?.agent_code) {
+    const st = await db.staffByCode(env.DB, prefs.agent_code);
+    if (st) {
+      agentId = st.id;
+      const camp = prefs.campaign_id ? await db.campaignById(env.DB, prefs.campaign_id) : null;
+      campaignId = camp?.active ? camp.id : null;
+    }
+  }
+  if (agentId) profile.referrer_id = null;
+
   if (existing && (existing.status === "rejected" || existing.vehicle_mode !== profile.vehicle_mode)) await db.clearDocs(env.DB, user.id);
   await db.saveProfile(env.DB, user.id, user.username ?? null, lang, profile);
   await db.setAgreement(env.DB, user.id, agreementVersion);
+  if (agentId && !existing?.agent_id) await db.setDriverFields(env.DB, user.id, { agent_id: agentId, campaign_id: campaignId });
   if (formLang && formLang !== prefs?.lang) await db.setLang(env.DB, user.id, formLang);
   await db.logEvent(env.DB, user.id, "driver", existing ? "form_updated" : "registered", existing?.status === "rejected" ? "ዳግም ማመልከቻ" : null);
 

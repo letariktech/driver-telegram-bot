@@ -7,6 +7,8 @@ import * as db from "./db.js";
 import * as A from "./actions.js";
 import { t, opt, STRINGS } from "./i18n.js";
 import { signToken } from "./auth.js";
+import { sendSms, limitWarning } from "./sms.js";
+import { pickLang } from "./i18n.js";
 
 const { esc, HTML, brand, driverCode, langOf, isAdmin, adminIds, adminChat, formButton } = A;
 
@@ -19,6 +21,7 @@ export function getBot(env) {
   return bot;
 }
 
+const sha = async (v) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)))].map((b) => b.toString(16).padStart(2, "0")).join("");
 const reasonText = (env, lang, r) => (C.REJECT_REASONS.includes(r) ? t(lang, `reasons.${r}`, { brand: brand(env) }) : r);
 
 export async function loginLink(env, user) {
@@ -95,7 +98,7 @@ function register(bot, env) {
     const n = (k) => s.byStatus[k] ?? 0;
     const total = Object.values(s.byStatus).reduce((a, b) => a + b, 0);
     await ctx.reply(
-      `📊 <b>የ${esc(brand(env))} አሽከርካሪዎች</b>\n\nጠቅላላ፦ <b>${total}</b> · ዛሬ፦ ${s.today} · በዚህ ሳምንት ገቢር፦ ${s.activatedWeek} · ⚡ ${s.green}\n\n` +
+      `📊 <b>የ${esc(brand(env))} አሽከርካሪዎች</b>\n\nጠቅላላ፦ <b>${total}</b> · ዛሬ፦ ${s.today} · በዚህ ሳምንት ለስራ ዝግጁ፦ ${s.activatedWeek} · ⚡ ${s.green}\n\n` +
         C.STATUSES.map((k) => `${t("am", `status.${k}`)}፦ <b>${n(k)}</b>`).join("\n"),
       HTML
     );
@@ -123,7 +126,7 @@ function register(bot, env) {
     const d = q && (await findDriver(q));
     if (!d) return ctx.reply("አጠቃቀም፦ /suspend 0911234567 ምክንያት\n💡 ሰነድ ለመጠየቅ ዳሽቦርዱን ይጠቀሙ — /dashboard");
     const res = await A.suspend(env, ctx.api, d.tg_id, actor(ctx), "other", { note: rest.join(" ") });
-    await ctx.reply(res.ok ? `⛔ ${esc(d.full_name)} ታግዷል።` : `ማገድ የሚቻለው ገቢር አሽከርካሪን ብቻ ነው (አሁን፦ ${t("am", `status.${d.status}`)})።`, HTML);
+    await ctx.reply(res.ok ? `⛔ ${esc(d.full_name)} ታግዷል።` : `ማገድ የሚቻለው ለስራ ዝግጁ አሽከርካሪን ብቻ ነው (አሁን፦ ${t("am", `status.${d.status}`)})።`, HTML);
   });
 
   admin.command("export", async (ctx) => {
@@ -171,7 +174,7 @@ function register(bot, env) {
     const id = Number(ctx.match[1]);
     const before = await db.getDriver(DB, id);
     const res = await A.pass(env, ctx.api, id, actor(ctx));
-    const label = { test: "🟢 ፈተናውን አልፏል → ስልጠና", inspection: "🟢 ፍተሻውን አልፏል → ስልጠና", orientation: "🟢 ገቢር ሆኗል" }[before?.status];
+    const label = { test: "🟢 ፈተናውን አልፏል → ስልጠና", inspection: "🟢 ፍተሻውን አልፏል → ስልጠና", orientation: "🟢 ለስራ ዝግጁ ሆኗል" }[before?.status];
     await done(ctx, id, res, "✅ ተመዝግቧል", label);
     if (res.ok && res.driver.status === "orientation") await askSchedule(ctx, res.driver);
   });
@@ -190,7 +193,7 @@ function register(bot, env) {
 
   admin.callbackQuery(/^act:(\d+)$/, async (ctx) => {
     const id = Number(ctx.match[1]);
-    await done(ctx, id, await A.activate(env, ctx.api, id, actor(ctx), "በቀጥታ"), "✅ ገቢር ሆኗል", "🟢 በቀጥታ ገቢር ሆኗል");
+    await done(ctx, id, await A.activate(env, ctx.api, id, actor(ctx), "በቀጥታ"), "✅ ለስራ ዝግጁ ሆኗል", "🟢 በቀጥታ ለስራ ዝግጁ ሆኗል");
   });
 
   const reasonsKb = (id, prefix, codes = C.REJECT_REASONS.filter((r) => !r.startsWith("test_") && r !== "no_show" && r !== "inspection")) => {
@@ -249,6 +252,147 @@ function register(bot, env) {
     ctx.answerCallbackQuery({ text: "ይህን ለማድረግ ፈቃድ የለዎትም።", show_alert: true })
   );
 
+  // ===== ሴልሶች (sales agents) =====
+
+  const staffOf = (ctx) => db.staffByTg(DB, ctx.from.id);
+  const agentPanel = () => new InlineKeyboard().webApp("📱 የሴልስ ገጼን ክፈት", A.agentUrl(env));
+
+  async function staffHome(ctx, st) {
+    const role = st.role === "supervisor" ? "ቡድን መሪ" : "ሴልስ";
+    await ctx.reply(
+      `👋 <b>${esc(st.name)}</b> (${esc(st.code)} · ${role})\n\n` +
+        "📱 <b>የሴልስ ገጽ</b> — የካምፔን QR ኮድዎ፣ የመዘገቧቸው አሽከርካሪዎች እና ኮሚሽንዎ\n" +
+        "➕ Telegram የሌለውን አሽከርካሪ ከገጹ ይመዝግቡ፤ ሰነዶቹን እዚሁ ቻት ፎቶ አንስተው ይልካሉ\n\n" +
+        "/panel — ገጹን ክፈት · /mydrivers — የመዘገብኳቸው",
+      { ...HTML, reply_markup: agentPanel() }
+    );
+  }
+
+  priv.command(["panel", "qr"], async (ctx, next) => {
+    const st = await staffOf(ctx);
+    if (!st) return next();
+    await staffHome(ctx, st);
+  });
+
+  priv.command("mydrivers", async (ctx, next) => {
+    const st = await staffOf(ctx);
+    if (!st) return next();
+    const rows = await db.agentDrivers(DB, st.id, 30);
+    if (!rows.length) return ctx.reply("እስካሁን የመዘገቡት አሽከርካሪ የለም።", { reply_markup: agentPanel() });
+    const kb = new InlineKeyboard();
+    const lines = rows.slice(0, 30).map((d) => {
+      const noTg = db.isNoTg(d.tg_id);
+      if (noTg && d.status === "awaiting_docs") kb.text(`📎 ${d.full_name} — ሰነድ ቀጥል`.slice(0, 60), `agdoc:${d.tg_id}`).row();
+      return `${noTg ? "📵" : "📱"} <b>${esc(d.full_name)}</b> · ${esc(d.phone)} — ${t("am", `status.${d.status}`)}`;
+    });
+    await ctx.reply(`👥 <b>የመዘገቧቸው (${rows.length})</b>\n\n${lines.join("\n")}`, { ...HTML, reply_markup: kb.inline_keyboard.length ? kb : agentPanel() });
+  });
+
+  priv.callbackQuery(/^agdoc:(-?\d+)$/, async (ctx) => {
+    const st = await staffOf(ctx);
+    const id = Number(ctx.match[1]);
+    const d = st && (await db.getDriver(DB, id));
+    if (!d || d.agent_id !== st.id) return ctx.answerCallbackQuery({ text: "ይህ አሽከርካሪ የእርስዎ አይደለም።", show_alert: true });
+    await ctx.answerCallbackQuery();
+    await A.askNextDocument(ctx.api, env, id);
+  });
+
+  // ሴልሱ ለመዘገበው (Telegram የሌለው) አሽከርካሪ ሰነድ ሲልክ
+  priv.on(["message:photo", "message:document"], async (ctx, next) => {
+    const st = await staffOf(ctx);
+    if (!st?.collecting_for) return next();
+    const d = await db.getDriver(DB, st.collecting_for);
+    if (!d || d.agent_id !== st.id || d.status !== "awaiting_docs") {
+      await DB.prepare("UPDATE staff SET collecting_for = NULL WHERE id = ?").bind(st.id).run();
+      return next();
+    }
+    let fileId, fileType;
+    if (ctx.message.photo) { fileId = ctx.message.photo.at(-1).file_id; fileType = "photo"; }
+    else {
+      const doc = ctx.message.document;
+      if (!/^(image\/|application\/pdf)/.test(doc.mime_type ?? "")) return ctx.reply("⚠️ ፎቶ ወይም PDF ብቻ ይላኩ።");
+      fileId = doc.file_id; fileType = /^image\//.test(doc.mime_type) ? "photo" : "document";
+    }
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const have = new Set((await db.getDocs(DB, d.tg_id)).map((x) => x.kind));
+      const nextDoc = C.requiredDocs(d).find((x) => !have.has(x.kind));
+      if (!nextDoc) return A.askNextDocument(ctx.api, env, d.tg_id);
+      if (await db.insertDoc(DB, d.tg_id, nextDoc.kind, fileId, fileType)) {
+        await ctx.reply(`✅ ${esc(d.full_name)} — ${t("am", `docs.${nextDoc.kind}`)[0]} ደርሷል።`, HTML);
+        return A.askNextDocument(ctx.api, env, d.tg_id); // ሲጠናቀቅ የ"ቀርቧል" ቅጂ በtell() ለሴልሱ ይደርሳል
+      }
+    }
+  });
+
+  // ===== በሴልስ የተመዘገበ አሽከርካሪ Telegram ሲከፍት (ማገናኘት) =====
+
+  async function linkTo(ctx, d, lang) {
+    if (await db.getDriver(DB, ctx.from.id)) return ctx.reply(T(lang, "link_conflict"), { reply_markup: { remove_keyboard: true } });
+    await db.linkTelegram(DB, d.tg_id, ctx.from.id, ctx.from.username);
+    await db.setLang(DB, ctx.from.id, langOf(d));
+    await db.logEvent(DB, ctx.from.id, "driver", "telegram_linked", d.phone);
+    await ctx.reply(T(langOf(d), "link_done"), { ...HTML, reply_markup: { remove_keyboard: true } });
+    if (d.agent_id) {
+      const ag = await db.staffById(DB, d.agent_id);
+      if (ag?.tg_id) await ctx.api.sendMessage(ag.tg_id, `🔗 <b>${esc(d.full_name)}</b> ምዝገባውን ከTelegram ጋር አገናኝቷል። ከአሁን በኋላ ማሳወቂያዎች በቀጥታ ይደርሱታል።`, HTML).catch(() => {});
+    }
+    await setUserCommands(ctx, langOf(d));
+    await showStatus(ctx, langOf(d));
+    if ((await db.getDriver(DB, ctx.from.id))?.status === "awaiting_docs") await A.askNextDocument(ctx.api, env, ctx.from.id);
+  }
+
+  priv.callbackQuery("link:start", async (ctx) => {
+    const lang = (await userLang(ctx)) ?? pickLang(ctx.from.language_code);
+    await ctx.answerCallbackQuery();
+    await db.setPrefs(DB, ctx.from.id, { link_state: "await_phone" });
+    await ctx.reply(T(lang, "link_ask"), { reply_markup: { keyboard: [[{ text: T(lang, "btn_share_phone"), request_contact: true }]], resize_keyboard: true, one_time_keyboard: true } });
+  });
+
+  priv.on("message:contact", async (ctx, next) => {
+    const lang = (await userLang(ctx)) ?? pickLang(ctx.from.language_code);
+    const c = ctx.message.contact;
+    const phone = C.normalizePhone(c.phone_number);
+    if (!phone) return ctx.reply(T(lang, "link_not_found"), { reply_markup: { remove_keyboard: true } });
+    const d = await db.findNoTgByPhone(DB, phone);
+    if (!d) return ctx.reply(T(lang, "link_not_found"), { reply_markup: { remove_keyboard: true } });
+    if (c.user_id === ctx.from.id) return linkTo(ctx, d, lang); // Telegram ያረጋገጠው የራሱ ቁጥር
+    return startOtp(ctx, d, lang);
+  });
+
+  async function startOtp(ctx, d, lang) {
+    const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, "0");
+    const res = await sendSms(env, { to: d.phone, text: t(langOf(d), "sms.otp", { brand: brand(env), code }), kind: "otp", tg_id: d.tg_id });
+    if (!res.ok) return ctx.reply(T(lang, "link_no_sms"), { reply_markup: { remove_keyboard: true } });
+    await db.setPrefs(DB, ctx.from.id, { link_state: "await_otp", otp_phone: d.phone, otp_hash: await sha(code + ctx.from.id), otp_expires: Date.now() + 10 * 60000, otp_tries: 0 });
+    await ctx.reply(T(lang, "link_otp_sent", { phone: d.phone.replace(/^\+251(\d{2})\d{4}(\d{3})$/, "0$1****$2") }), { reply_markup: { remove_keyboard: true } });
+  }
+
+  // የስልክ ቁጥር ወይም OTP በጽሑፍ
+  priv.on("message:text", async (ctx, next) => {
+    const p = await db.getPrefs(DB, ctx.from.id);
+    if (!p?.link_state || ctx.message.text.startsWith("/")) return next();
+    const lang = (await userLang(ctx)) ?? pickLang(ctx.from.language_code);
+    const txt = ctx.message.text.trim();
+    if (p.link_state === "await_otp" && /^\d{4,8}$/.test(txt)) {
+      if (Date.now() > p.otp_expires || p.otp_tries >= 5) {
+        await db.setPrefs(DB, ctx.from.id, { link_state: "await_phone", otp_hash: null });
+        return ctx.reply(T(lang, "link_otp_expired"));
+      }
+      if ((await sha(txt + ctx.from.id)) !== p.otp_hash) {
+        await db.setPrefs(DB, ctx.from.id, { otp_tries: (p.otp_tries ?? 0) + 1 });
+        return ctx.reply(T(lang, "link_otp_bad"));
+      }
+      const d = await db.findNoTgByPhone(DB, p.otp_phone);
+      if (!d) return ctx.reply(T(lang, "link_not_found"));
+      return linkTo(ctx, d, lang);
+    }
+    const phone = C.normalizePhone(txt);
+    if (!phone) return next();
+    const d = await db.findNoTgByPhone(DB, phone);
+    if (!d) return ctx.reply(T(lang, "link_not_found"));
+    return startOtp(ctx, d, lang);
+  });
+
   // ===== ቋንቋ =====
 
   const langKeyboard = () => {
@@ -293,7 +437,7 @@ function register(bot, env) {
     if (!d) {
       return ctx.reply(
         `<b>${T(lang, "welcome_title")}</b>\n\n${T(lang, "welcome_body", { min_age: C.MIN_AGE, max_age: C.MAX_AGE, max_car: C.MAX_VEHICLE_AGE })}`,
-        { ...HTML, reply_markup: formButton(env, lang, "btn_start") }
+        { ...HTML, reply_markup: formButton(env, lang, "btn_start").row().text(T(lang, "btn_agent_registered"), "link:start") }
       );
     }
     let text = `${T(lang, "status_title", { status: T(lang, `status.${d.status}`) })}\n\n${timeline(d, lang)}`;
@@ -315,8 +459,35 @@ function register(bot, env) {
   }
 
   priv.command("start", async (ctx) => {
-    const ref = ctx.match?.match(/^ref_(CB\d+)$/i);
+    const payload = ctx.match ?? "";
+    // የሴልስ ግብዣ፦ staff_<token>
+    const inv = payload.match(/^staff_([A-Za-z0-9_-]{8,})$/);
+    if (inv) {
+      const st = await db.staffByToken(DB, inv[1]);
+      if (!st) return ctx.reply("⚠️ ይህ የግብዣ ሊንክ አይሰራም ወይም ቀድሞ ጥቅም ላይ ውሏል። አስተዳዳሪውን ይጠይቁ።");
+      await DB.prepare("UPDATE staff SET tg_id = ?, username = ?, invite_token = NULL WHERE id = ?").bind(ctx.from.id, ctx.from.username ?? null, st.id).run();
+      await db.logEvent(DB, null, st.name, "staff_linked", `${st.code} · ${st.role}`);
+      await ctx.api.setMyCommands([
+        { command: "panel", description: "📱 የሴልስ ገጽ (QR፣ አሽከርካሪዎች፣ ኮሚሽን)" },
+        { command: "mydrivers", description: "የመዘገብኳቸው አሽከርካሪዎች" },
+      ], { scope: { type: "chat", chat_id: ctx.from.id } }).catch(() => {});
+      return staffHome(ctx, { ...st, tg_id: ctx.from.id });
+    }
+    // የሴልስ QR፦ a_<CODE>_<campaignId>
+    const ag = payload.match(/^a_([A-Za-z0-9]+)_(\d+)$/);
+    if (ag && !(await db.getDriver(DB, ctx.from.id))) {
+      const st = await db.staffByCode(DB, ag[1]);
+      if (st) await db.setPrefs(DB, ctx.from.id, { agent_code: st.code, campaign_id: Number(ag[2]) });
+    }
+    if (payload === "link") {
+      const lang = (await userLang(ctx)) ?? pickLang(ctx.from.language_code);
+      await db.setPrefs(DB, ctx.from.id, { link_state: "await_phone" });
+      return ctx.reply(T(lang, "link_ask"), { reply_markup: { keyboard: [[{ text: T(lang, "btn_share_phone"), request_contact: true }]], resize_keyboard: true, one_time_keyboard: true } });
+    }
+    const ref = payload.match(/^ref_(CB\d+)$/i);
     if (ref) await db.setRefCode(DB, ctx.from.id, ref[1].toUpperCase());
+    const st = await staffOf(ctx);
+    if (st && !payload) { await staffHome(ctx, st); if (!isAdmin(env, ctx.from.id)) return; }
     const lang = await userLang(ctx);
     if (!lang) return ctx.reply(t("am", "choose_lang"), { reply_markup: langKeyboard() });
     await showStatus(ctx, lang, true);
@@ -342,9 +513,13 @@ function register(bot, env) {
   });
 
   // ቀጠሮ ማረጋገጫ
-  priv.callbackQuery(/^(ac|ar):(\d+)$/, async (ctx) => {
-    if (Number(ctx.match[2]) !== ctx.from.id) return ctx.answerCallbackQuery();
-    const d = await db.getDriver(DB, ctx.from.id);
+  priv.callbackQuery(/^(ac|ar):(-?\d+)$/, async (ctx) => {
+    const target = Number(ctx.match[2]);
+    let d = await db.getDriver(DB, target);
+    if (target !== ctx.from.id) {
+      const st = await staffOf(ctx);
+      if (!st || !d || d.agent_id !== st.id || !db.isNoTg(target)) return ctx.answerCallbackQuery();
+    }
     const lang = langOf(d);
     if (!d || !C.APPOINTMENT_STAGES.includes(d.status) || !(d.appt_text || d.appt_at)) {
       return ctx.answerCallbackQuery({ text: T(lang, "appt_invalid"), show_alert: true });
@@ -352,14 +527,15 @@ function register(bot, env) {
     await ctx.answerCallbackQuery();
     await ctx.editMessageReplyMarkup({ reply_markup: undefined }).catch(() => {});
     const when = A.apptText(d, "am");
+    const viaAgent = target !== ctx.from.id;
     if (ctx.match[1] === "ac") {
       await db.confirmAppt(DB, d.tg_id);
-      await db.logEvent(DB, d.tg_id, "driver", "appt_confirmed", when);
-      await ctx.reply(T(lang, "appt_confirmed", { when: esc(A.apptText(d, lang)) }), HTML);
+      await db.logEvent(DB, d.tg_id, viaAgent ? `${ctx.from.first_name} (ሴልስ)` : "driver", "appt_confirmed", when);
+      await ctx.reply(viaAgent ? `👍 ለ${esc(d.full_name)} ቀጠሮው ተረጋግጧል።` : T(lang, "appt_confirmed", { when: esc(A.apptText(d, lang)) }), HTML);
       await A.notifyAdmins(ctx.api, env, `✅ <b>${esc(d.full_name)}</b> (${esc(d.phone)}) ቀጠሮውን አረጋግጧል፦ ${esc(when)}`);
     } else {
-      await db.logEvent(DB, d.tg_id, "driver", "appt_reschedule", when);
-      await ctx.reply(T(lang, "appt_resched_ack"));
+      await db.logEvent(DB, d.tg_id, viaAgent ? `${ctx.from.first_name} (ሴልስ)` : "driver", "appt_reschedule", when);
+      await ctx.reply(viaAgent ? "🔁 ለአስተዳዳሪዎች ተነግሯል።" : T(lang, "appt_resched_ack"));
       await A.notifyAdmins(ctx.api, env, `🔁 <b>${esc(d.full_name)}</b> (${esc(d.phone)}) ሌላ ቀን ጠይቋል (የአሁኑ፦ ${esc(when)})።`, {
         reply_markup: new InlineKeyboard().text("📅 አዲስ ቀጠሮ ስጥ", `ts:${d.tg_id}`),
       });
@@ -449,21 +625,48 @@ const driverCommands = (lang) =>
 export async function runDaily(env) {
   const api = getBot(env).api;
   const DB = env.DB;
-  const sent = { docs: 0, license: 0 };
+  const sent = { docs: 0, license: 0, appt: 0, sms: 0 };
   const T = (lang, key, vars = {}) => t(lang, key, { brand: brand(env), ...vars });
+  const sms = async (d, kind, vars) => {
+    const r = await sendSms(env, { to: d.phone, text: T(langOf(d), `sms.${kind}`, vars), kind, tg_id: d.tg_id });
+    if (r.ok) sent.sms++;
+    await limitWarning(env, r, (m) => A.notifyAdmins(api, env, m));
+    return r;
+  };
+  // ሰነድ ያልጨረሱ — Telegram ለሌላቸው ሴልሱ ይታወሳል
   for (const d of await db.staleAwaitingDocs(DB, 20)) {
-    await api.sendMessage(d.tg_id, T(langOf(d), "reminder_docs", { name: esc(d.full_name?.split(" ")[0]) }), HTML).then(() => sent.docs++).catch(() => {});
+    if (db.isNoTg(d.tg_id)) {
+      const ag = d.agent_id ? await db.staffById(DB, d.agent_id) : null;
+      if (ag?.tg_id) await api.sendMessage(ag.tg_id, `⏰ <b>${esc(d.full_name)}</b> (${esc(d.phone)}) ሰነዶቹን አልጨረሰም። /mydrivers ብለው "📎 ሰነድ ላክ"ን ይጫኑ።`, HTML).then(() => sent.docs++).catch(() => {});
+    } else {
+      await api.sendMessage(d.tg_id, T(langOf(d), "reminder_docs", { name: esc(d.full_name?.split(" ")[0]) }), HTML).then(() => sent.docs++).catch(() => {});
+    }
     await db.markReminded(DB, d.tg_id);
   }
   for (const d of await db.expiringLicenses(DB, 15)) {
-    await api.sendMessage(d.tg_id, T(langOf(d), "reminder_license", { date: esc(d.license_expiry) }), HTML).then(() => sent.license++).catch(() => {});
+    if (db.isNoTg(d.tg_id)) await sms(d, "license_expiry", { date: d.license_expiry }).then((r) => r.ok && sent.license++);
+    else await api.sendMessage(d.tg_id, T(langOf(d), "reminder_license", { date: esc(d.license_expiry) }), HTML).then(() => sent.license++).catch(() => {});
     await db.markReminded(DB, d.tg_id);
+  }
+  // የነገ ቀጠሮ ማስታወሻ — Telegram ላላቸው በTelegram፣ ለሁሉም በSMS
+  const tomorrow = new Date(Date.now() + 3 * 3600e3 + 86400e3).toISOString().slice(0, 10);
+  for (const d of await db.apptsTomorrow(DB, tomorrow, 25)) {
+    const l = langOf(d);
+    const vars = { title: T(l, `appt_title_${d.status}`).replace(/^\S+\s/, ""), when: A.apptText(d, l) };
+    if (!db.isNoTg(d.tg_id)) await api.sendMessage(d.tg_id, `⏰ ${esc(T(l, "sms.appt_reminder", vars))}`, HTML).catch(() => {});
+    else {
+      const ag = d.agent_id ? await db.staffById(DB, d.agent_id) : null;
+      if (ag?.tg_id) await api.sendMessage(ag.tg_id, `⏰ ነገ፦ <b>${esc(d.full_name)}</b> (${esc(d.phone)}) — ${esc(vars.title)} · ${esc(vars.when)}`, HTML).catch(() => {});
+    }
+    await sms(d, "appt_reminder", vars);
+    await DB.prepare("UPDATE drivers SET appt_reminded_at = datetime('now') WHERE tg_id = ?").bind(d.tg_id).run();
+    sent.appt++;
   }
   const s = await db.stats(DB);
   const n = (k) => s.byStatus[k] ?? 0;
   if (n("pending") + n("test") + n("inspection") + n("orientation") > 0) {
     await A.notifyAdmins(api, env,
-      `☀️ <b>የዛሬ ማጠቃለያ</b>\n\n⏳ ሰነድ ግምገማ፦ <b>${n("pending")}</b>\n📝 ፈተና፦ <b>${n("test")}</b> · 🔧 ፍተሻ፦ <b>${n("inspection")}</b> · 🎓 ስልጠና፦ <b>${n("orientation")}</b>\n✅ ገቢር፦ ${n("active")} (በሳምንቱ +${s.activatedWeek})`,
+      `☀️ <b>የዛሬ ማጠቃለያ</b>\n\n⏳ ሰነድ ግምገማ፦ <b>${n("pending")}</b>\n📝 ፈተና፦ <b>${n("test")}</b> · 🔧 ፍተሻ፦ <b>${n("inspection")}</b> · 🎓 ስልጠና፦ <b>${n("orientation")}</b>\n✅ ለስራ ዝግጁ፦ ${n("active")} (በሳምንቱ +${s.activatedWeek})${sent.appt ? `\n⏰ የነገ ቀጠሮ ማስታወሻ፦ ${sent.appt}` : ""}`,
       { reply_markup: new InlineKeyboard().url("📊 ዳሽቦርድ", A.dashboardUrl(env)) });
   }
   return sent;
