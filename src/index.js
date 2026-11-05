@@ -1,24 +1,33 @@
 import { webhookCallback } from "grammy";
-import { getBot, setOrigin, setup, runDaily } from "./bot.js";
+import { getBot, setup, runDaily } from "./bot.js";
+import { setOrigin } from "./actions.js";
 import { handleApi } from "./api.js";
+import { handleAdminApi, handleLogin, handleLogout } from "./admin.js";
 import { ensureSchema } from "./db.js";
 import * as C from "./constants.js";
+import { STRINGS } from "./i18n.js";
 import FORM_HTML from "./webapp.html";
+import ADMIN_HTML from "./admin.html";
 
 const OPTIONS = JSON.stringify({
-  SUB_CITIES: C.SUB_CITIES, LANGUAGES: C.LANGUAGES, LICENSE_GRADES: C.LICENSE_GRADES, EXPERIENCE: C.EXPERIENCE,
-  PREV_PLATFORMS: C.PREV_PLATFORMS, VEHICLE_MODES: C.VEHICLE_MODES, VEHICLE_TYPES: C.VEHICLE_TYPES, SEATS: C.SEATS,
-  PLATE_REGIONS: C.PLATE_REGIONS, SERVICES: C.SERVICES, SHIFTS: C.SHIFTS, PHONE_TYPES: C.PHONE_TYPES,
-  MIN_AGE: C.MIN_AGE, MIN_VEHICLE_YEAR: C.MIN_VEHICLE_YEAR,
+  SUB_CITIES: C.SUB_CITIES, SPOKEN: C.SPOKEN, LICENSE_GRADES: C.LICENSE_GRADES, ACCEPTED_GRADES: C.ACCEPTED_GRADES, EXPERIENCE: C.EXPERIENCE,
+  PREV_PLATFORMS: C.PREV_PLATFORMS, VEHICLE_MODES: C.VEHICLE_MODES, VEHICLE_TYPES: C.VEHICLE_TYPES, VEHICLE_MAKES: C.VEHICLE_MAKES,
+  FUEL_TYPES: C.FUEL_TYPES, GREEN_FUELS: C.GREEN_FUELS, SEATS: C.SEATS, PLATE_REGIONS: C.PLATE_REGIONS, SERVICES: C.SERVICES,
+  SHIFTS: C.SHIFTS, PHONE_TYPES: C.PHONE_TYPES, MIN_AGE: C.MIN_AGE, MAX_AGE: C.MAX_AGE, MAX_VEHICLE_AGE: C.MAX_VEHICLE_AGE,
+  INSPECTION_AFTER_YEARS: C.INSPECTION_AFTER_YEARS, ALLOWED_PLATE_CODES: C.ALLOWED_PLATE_CODES,
+  I18N: Object.fromEntries(Object.entries(STRINGS).map(([k, v]) => [k, { f: v.f, opt: v.opt, lang_name: v.lang_name, reasons: v.reasons }])),
 }).replace(/</g, "\\u003c");
+
 const pages = new Map();
-const page = (brand) => {
-  if (!pages.has(brand)) pages.set(brand, FORM_HTML.replace("__OPTIONS__", OPTIONS).replaceAll("__BRAND__", brand.replace(/[<>&"]/g, "")));
-  return pages.get(brand);
+const page = (key, html, brand) => {
+  const k = `${key}:${brand}`;
+  if (!pages.has(k)) pages.set(k, html.replace("__OPTIONS__", OPTIONS).replaceAll("__BRAND__", brand.replace(/[<>&"]/g, "")));
+  return pages.get(k);
 };
 
-const json = (data, status = 200) =>
-  new Response(JSON.stringify(data, null, 2), { status, headers: { "content-type": "application/json; charset=utf-8" } });
+const SECURITY = { "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "x-frame-options": "SAMEORIGIN" };
+const html = (body, extra = {}) => new Response(body, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache", ...SECURITY, ...extra } });
+const json = (data, status = 200) => new Response(JSON.stringify(data, null, 2), { status, headers: { "content-type": "application/json; charset=utf-8" } });
 
 let handler = null;
 
@@ -27,56 +36,41 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
     setOrigin(url.origin);
+    const brand = env.BRAND_NAME || "Cabby";
 
     const missing = ["BOT_TOKEN", "WEBHOOK_SECRET", "ADMIN_CHAT_ID"].filter((k) => !env[k]);
     if (!env.DB) missing.push("DB (D1 binding)");
 
     if (request.method === "GET") {
-      if (path === "/") {
-        return new Response(page(env.BRAND_NAME || "Cabby"), {
-          headers: {
-            "content-type": "text/html; charset=utf-8",
-            "cache-control": "no-cache",
-            "x-content-type-options": "nosniff",
-            "referrer-policy": "no-referrer",
-          },
-        });
-      }
+      if (path === "/") return html(page("form", FORM_HTML, brand));
       if (path === "/health") return json({ ok: missing.length === 0, missing });
-      if (path === "/setup") {
-        if (missing.length) return json({ ok: false, missing }, 500);
-        if (url.searchParams.get("key") !== env.WEBHOOK_SECRET) return json({ ok: false, error: "Unauthorized" }, 401);
-        try {
-          return json(await setup(env, url.origin));
-        } catch (e) {
-          return json({ ok: false, error: String(e.description ?? e.message) }, 500);
-        }
-      }
-      return new Response("Not found", { status: 404 });
+      if (path === "/admin") return html(page("admin", ADMIN_HTML, brand), { "x-frame-options": "DENY" });
+      if (path === "/admin/logout") return handleLogout();
     }
-
-    if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
     if (missing.length) return json({ ok: false, missing }, 500);
+
+    if (request.method === "GET" && path === "/setup") {
+      if (url.searchParams.get("key") !== env.WEBHOOK_SECRET) return json({ ok: false, error: "Unauthorized" }, 401);
+      try { return json(await setup(env, url.origin)); } catch (e) { return json({ ok: false, error: String(e.description ?? e.message) }, 500); }
+    }
 
     await ensureSchema(env.DB);
 
-    if (path.startsWith("/api/")) {
-      if (path !== "/api/me" && path !== "/api/register") return new Response("Not found", { status: 404 });
-      return handleApi(request, env, path, getBot);
-    }
+    if (path === "/admin/login" && request.method === "GET") return handleLogin(request, env);
+    if (path.startsWith("/api/admin")) return handleAdminApi(request, env, path, getBot);
+
+    if (request.method !== "POST") return new Response("Not found", { status: 404 });
+
+    if (path === "/api/me" || path === "/api/register") return handleApi(request, env, path, getBot);
 
     if (path === "/webhook" || path === "/") {
-      if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== env.WEBHOOK_SECRET) {
-        return new Response("Unauthorized", { status: 401 });
-      }
+      if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== env.WEBHOOK_SECRET) return new Response("Unauthorized", { status: 401 });
       handler ??= webhookCallback(getBot(env), "cloudflare-mod");
       return handler(request);
     }
-
     return new Response("Not found", { status: 404 });
   },
 
-  // በየቀኑ (wrangler.toml → [triggers]) — ማስታወሻዎች እና የአስተዳዳሪ ማጠቃለያ
   async scheduled(event, env, ctx) {
     if (!env.DB || !env.BOT_TOKEN) return;
     await ensureSchema(env.DB);

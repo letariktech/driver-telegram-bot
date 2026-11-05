@@ -47,3 +47,28 @@ export async function verifyInitData(initData, botToken, maxAgeSeconds = 86400) 
     return null;
   }
 }
+
+// ---------- የዳሽቦርድ መግቢያ (የተፈረሙ tokens) ----------
+
+const b64u = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const fromB64u = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+/** { ...payload, exp } → "payload.signature" */
+export async function signToken(payload, secret, ttlSeconds) {
+  const body = b64u(enc.encode(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds })));
+  const sig = b64u(await hmac(`dash:${secret}`, body));
+  return `${body}.${sig}`;
+}
+
+export async function verifyToken(token, secret) {
+  const [body, sig] = String(token ?? "").split(".");
+  if (!body || !sig) return null;
+  const expected = b64u(await hmac(`dash:${secret}`, body));
+  if (!safeEqual(expected, sig)) return null;
+  try {
+    const p = JSON.parse(new TextDecoder().decode(fromB64u(body)));
+    return p.exp > Date.now() / 1000 ? p : null;
+  } catch {
+    return null;
+  }
+}
