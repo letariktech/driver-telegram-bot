@@ -1,11 +1,45 @@
-// የCabby ምዝገባ ደንቦች እና ምርጫዎች — እዚህ በማስተካከል ቦቱን ማበጀት ይቻላል
+// የCabby ምዝገባ ደንቦች እና ምርጫዎች
+// ደንቦቹ (ዕድሜ፣ የመኪና ዓመት፣ ደረጃዎች፣ ሰሌዳ፣ ሰነዶች…) በዳሽቦርዱ "ቅንብሮች" ገጽ ይቀየራሉ፤ እዚህ ያሉት መነሻ እሴቶች ናቸው።
 // እሴቶቹ (codes) በዳታቤዝ ይቀመጣሉ፤ የሚታዩት ስሞች በ i18n.js ውስጥ በ4 ቋንቋ ናቸው።
 
-export const MIN_AGE = 18;
-export const MAX_AGE = 70;
-export const MAX_VEHICLE_AGE = 10;       // ከተመረተ ከ10 ዓመት ያልበለጠ
-export const INSPECTION_AFTER_YEARS = 8; // ከ8 ዓመት በላይ የሆነ መኪና ፍተሻ ያስፈልገዋል
-export const ALLOWED_PLATE_CODES = null; // ለምሳሌ ["1", "3"] — null ማለት ሁሉም ይቀበላሉ
+export const RULE_DEFAULTS = {
+  min_age: 18,
+  max_age: 70,
+  max_vehicle_age: 10,          // ከተመረተ ከ10 ዓመት ያልበለጠ
+  inspection_after_years: 8,    // ከ8 ዓመት በላይ የሆነ መኪና ፍተሻ ያስፈልገዋል
+  accepted_grades: ["ሕዝብ 1", "ሕዝብ 2", "ሕዝብ 3", "ደረቅ 1", "ደረቅ 2", "ደረቅ 3", "ፈሳሽ 1", "ፈሳሽ 2"],
+  allowed_plate_codes: [],      // ባዶ = ሁሉም ይቀበላሉ፤ ለምሳሌ ["1", "3"]
+  green_fuels: ["hybrid", "electric"],
+  disabled_docs: [],            // የማይጠየቁ ሰነዶች
+  test_for_no_car: true,        // መኪና የሌላቸው የቃል እና የተግባር ፈተና
+  require_orientation: true,    // ከማግበር በፊት ስልጠና
+};
+export const LINK_KEYS = ["SHARE_ANDROID_URL", "SHARE_IOS_URL", "RESERVE_ANDROID_URL", "RESERVE_IOS_URL", "DRIVER_GROUP_LINK", "SUPPORT_CONTACT", "REFERRAL_REWARD"];
+
+// በእያንዳንዱ ጥያቄ ከዳታቤዝ ይሞላሉ (applySettings)
+export let MIN_AGE = RULE_DEFAULTS.min_age;
+export let MAX_AGE = RULE_DEFAULTS.max_age;
+export let MAX_VEHICLE_AGE = RULE_DEFAULTS.max_vehicle_age;
+export let INSPECTION_AFTER_YEARS = RULE_DEFAULTS.inspection_after_years;
+export let ACCEPTED_GRADES = RULE_DEFAULTS.accepted_grades;
+export let ALLOWED_PLATE_CODES = null;
+export let GREEN_FUELS = RULE_DEFAULTS.green_fuels;
+export let DISABLED_DOCS = [];
+export let TEST_FOR_NO_CAR = true;
+export let REQUIRE_ORIENTATION = true;
+export let LINKS = {};
+export let SETTINGS_VERSION = 0;
+
+export function applySettings({ rules = {}, links = {}, version = 0 } = {}) {
+  const r = { ...RULE_DEFAULTS, ...rules };
+  MIN_AGE = r.min_age; MAX_AGE = r.max_age; MAX_VEHICLE_AGE = r.max_vehicle_age; INSPECTION_AFTER_YEARS = r.inspection_after_years;
+  ACCEPTED_GRADES = r.accepted_grades; ALLOWED_PLATE_CODES = r.allowed_plate_codes?.length ? r.allowed_plate_codes : null;
+  GREEN_FUELS = r.green_fuels; DISABLED_DOCS = r.disabled_docs ?? []; TEST_FOR_NO_CAR = r.test_for_no_car !== false; REQUIRE_ORIENTATION = r.require_orientation !== false;
+  LINKS = links ?? {};
+  SETTINGS_VERSION = version;
+}
+/** ቅንብሮች ውስጥ ያለ ሊንክ፣ ከሌለ የwrangler.toml እሴት */
+export const cfg = (env, key) => (LINKS[key] ?? "").trim() || env?.[key] || "";
 
 export const LANGS = ["am", "en", "om", "ti"];
 
@@ -21,8 +55,6 @@ export const SPOKEN = ["am", "om", "en", "ti", "so", "other"];
 export const LICENSE_GRADES = [
   "ሕዝብ 1", "ሕዝብ 2", "ሕዝብ 3", "ደረቅ 1", "ደረቅ 2", "ደረቅ 3", "ፈሳሽ 1", "ፈሳሽ 2", "አውቶሞቢል", "ሞተር ሳይክል",
 ];
-// ሕዝብ 1 እና ከዚያ በላይ ብቻ
-export const ACCEPTED_GRADES = ["ሕዝብ 1", "ሕዝብ 2", "ሕዝብ 3", "ደረቅ 1", "ደረቅ 2", "ደረቅ 3", "ፈሳሽ 1", "ፈሳሽ 2"];
 
 export const EXPERIENCE = ["lt1", "1_2", "3_5", "6_10", "10p"];
 export const PREV_PLATFORMS = ["none", "Ride", "Feres", "ZayRide", "Yango", "other"];
@@ -33,7 +65,6 @@ export const VEHICLE_MAKES = [
   "Geely", "Chery", "Mercedes-Benz", "Mitsubishi", "Ford", "Peugeot", "Daihatsu", "other",
 ];
 export const FUEL_TYPES = ["petrol", "diesel", "hybrid", "electric"];
-export const GREEN_FUELS = ["hybrid", "electric"]; // ቅድሚያ እና ልዩ ጥቅም
 export const SEATS = ["4", "5", "6", "7+"];
 export const PLATE_REGIONS = [
   "አዲስ አበባ", "ኢትዮጵያ (ፌዴራል)", "ኦሮሚያ", "አማራ", "ትግራይ", "ድሬዳዋ", "ሐረሪ",
@@ -59,12 +90,14 @@ export const DOCUMENTS = [
   { kind: "car_interior", when: hasCar },
   { kind: "authorization", when: (d) => d.vehicle_mode === "other" },
 ];
-export const requiredDocs = (d) => DOCUMENTS.filter((x) => !x.when || x.when(d));
+export const CORE_DOCS = ["license", "id", "selfie"]; // ሁልጊዜ የሚጠየቁ
+export const requiredDocs = (d) => DOCUMENTS.filter((x) => (!x.when || x.when(d)) && !DISABLED_DOCS.includes(x.kind));
 
-export const REJECT_REASONS = ["blurry", "expired", "mismatch", "vehicle", "experience", "test_oral", "test_practical", "inspection", "no_show", "other"];
+export const REJECT_REASONS = ["blurry", "expired", "mismatch", "vehicle", "experience", "test_oral", "test_practical", "inspection", "no_show", "complaint", "conduct", "other"];
 
 // ሁኔታዎች (statuses)
 export const STATUSES = ["awaiting_docs", "pending", "test", "inspection", "orientation", "active", "rejected", "suspended"];
+export const SUSPEND_REASONS = ["expired", "mismatch", "vehicle", "complaint", "conduct", "other"];
 export const APPOINTMENT_STAGES = ["test", "inspection", "orientation"];
 
 export const vehicleAge = (d, year) => (d.vehicle_year ? year - d.vehicle_year : null);
@@ -72,10 +105,12 @@ export const isGreen = (d) => GREEN_FUELS.includes(d.fuel_type);
 
 /** ሰነዶቹ ከጸደቁ በኋላ የሚቀጥለው ደረጃ */
 export function stageAfterDocs(d, year = new Date().getFullYear()) {
-  if (d.vehicle_mode === "none") return "test";                     // መኪና የሌለው → የቃል እና የተግባር ፈተና
-  if (vehicleAge(d, year) > INSPECTION_AFTER_YEARS) return "inspection"; // ከ8 ዓመት በላይ → ፍተሻ
-  return "orientation";
+  if (d.vehicle_mode === "none" && TEST_FOR_NO_CAR) return "test";        // መኪና የሌለው → የቃል እና የተግባር ፈተና
+  if (d.vehicle_mode !== "none" && vehicleAge(d, year) > INSPECTION_AFTER_YEARS) return "inspection"; // ከ8 ዓመት በላይ → ፍተሻ
+  return REQUIRE_ORIENTATION ? "orientation" : "active";
 }
+/** ፈተና/ፍተሻ ካለፈ በኋላ */
+export const stageAfterPass = () => (REQUIRE_ORIENTATION ? "orientation" : "active");
 
 export function normalizePhone(raw) {
   const m = String(raw ?? "").replace(/[\s\-()]/g, "").match(/^(?:\+?251|0)?([79]\d{8})$/);

@@ -121,8 +121,8 @@ function register(bot, env) {
   admin.command("suspend", async (ctx) => {
     const [q, ...rest] = ctx.match.trim().split(/\s+/);
     const d = q && (await findDriver(q));
-    if (!d) return ctx.reply("አጠቃቀም፦ /suspend 0911234567 ምክንያት");
-    const res = await A.suspend(env, ctx.api, d.tg_id, actor(ctx), rest.join(" ") || "other");
+    if (!d) return ctx.reply("አጠቃቀም፦ /suspend 0911234567 ምክንያት\n💡 ሰነድ ለመጠየቅ ዳሽቦርዱን ይጠቀሙ — /dashboard");
+    const res = await A.suspend(env, ctx.api, d.tg_id, actor(ctx), "other", { note: rest.join(" ") });
     await ctx.reply(res.ok ? `⛔ ${esc(d.full_name)} ታግዷል።` : `ማገድ የሚቻለው ገቢር አሽከርካሪን ብቻ ነው (አሁን፦ ${t("am", `status.${d.status}`)})።`, HTML);
   });
 
@@ -205,7 +205,7 @@ function register(bot, env) {
   });
   admin.callbackQuery(/^sus:(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await ctx.editMessageReplyMarkup({ reply_markup: reasonsKb(Number(ctx.match[1]), "ss", ["mismatch", "expired", "vehicle", "other"]) });
+    await ctx.editMessageReplyMarkup({ reply_markup: reasonsKb(Number(ctx.match[1]), "ss", C.SUSPEND_REASONS) });
   });
   admin.callbackQuery(/^back:(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -217,6 +217,11 @@ function register(bot, env) {
     const id = Number(idStr);
     if (kind === "ss") return done(ctx, id, await A.suspend(env, ctx.api, id, actor(ctx), code), "⛔ ታግዷል", "⛔ ታግዷል");
     await done(ctx, id, await A.reject(env, ctx.api, id, actor(ctx), code), "❌ ውድቅ ተደርጓል", `🔴 ውድቅ — ${esc(reasonText(env, "am", code))}`);
+  });
+
+  admin.callbackQuery(/^fixno:(\d+)$/, async (ctx) => {
+    const id = Number(ctx.match[1]);
+    await done(ctx, id, await A.rejectFix(env, ctx.api, id, actor(ctx)), "↩️ ለአሽከርካሪው ተነግሯል", "↩️ ማስተካከያው በቂ አልሆነም");
   });
 
   admin.callbackQuery(/^uns:(\d+)$/, async (ctx) => {
@@ -240,7 +245,7 @@ function register(bot, env) {
     await done(ctx, id, await A.requestDoc(env, ctx.api, id, actor(ctx), kind), "📎 ተጠይቋል", `📎 ${esc(t("am", `docs.${kind}`)[0])} እንደገና ተጠይቋል`);
   });
 
-  bot.callbackQuery(/^(ok|ts|pass|fail|act|uns|sus|rej|back|rr|ss|rd|rdk|view):/, (ctx) =>
+  bot.callbackQuery(/^(ok|ts|pass|fail|act|uns|sus|rej|back|rr|ss|rd|rdk|view|fixno):/, (ctx) =>
     ctx.answerCallbackQuery({ text: "ይህን ለማድረግ ፈቃድ የለዎትም።", show_alert: true })
   );
 
@@ -301,7 +306,10 @@ function register(bot, env) {
       return A.askNextDocument(ctx.api, env, ctx.from.id);
     }
     if (d.status === "rejected") return ctx.reply(`${text}\n\n${T(lang, "status_reason", { reason: esc(reasonText(env, lang, d.reject_reason)) })}`, { ...HTML, reply_markup: formButton(env, lang, "btn_reapply") });
-    if (d.status === "suspended") return ctx.reply(`${text}\n\n${T(lang, "status_reason", { reason: esc(reasonText(env, lang, d.reject_reason)) })}`, HTML);
+    if (d.status === "suspended") {
+      const n = A.suspendNotice(env, d);
+      return ctx.reply(n.text, { ...HTML, reply_markup: n.kb });
+    }
     if (d.status === "active") return ctx.reply(text, { ...HTML, reply_markup: A.appButtons(env, d, lang) });
     return ctx.reply(`${text}\n\n${T(lang, "status_wait")}`, HTML);
   }
@@ -321,7 +329,7 @@ function register(bot, env) {
   });
   priv.command("help", async (ctx) => {
     const lang = (await userLang(ctx)) ?? "am";
-    const support = env.SUPPORT_CONTACT ? `\n\n${T(lang, "support", { contact: esc(env.SUPPORT_CONTACT) })}` : "";
+    const support = C.cfg(env, "SUPPORT_CONTACT") ? `\n\n${T(lang, "support", { contact: esc(C.cfg(env, "SUPPORT_CONTACT")) })}` : "";
     await ctx.reply(T(lang, "help") + support, HTML);
   });
   priv.command("referral", async (ctx) => {
@@ -358,6 +366,17 @@ function register(bot, env) {
     }
   });
 
+  // ===== የታገደ አሽከርካሪ ማስተካከያ =====
+  priv.callbackQuery(/^fx:(docs|appeal)$/, async (ctx) => {
+    const d = await db.getDriver(DB, ctx.from.id);
+    const lang = langOf(d);
+    if (d?.status !== "suspended" || d.fix_state === "submitted") return ctx.answerCallbackQuery({ text: T(lang, d?.fix_state === "submitted" ? "fix_submitted" : "not_now"), show_alert: true });
+    await ctx.answerCallbackQuery();
+    if (ctx.match[1] === "docs") return A.askFixDoc(ctx.api, env, d.tg_id);
+    await db.setFix(DB, d.tg_id, { fix_state: "appeal_wait" });
+    await ctx.reply(T(lang, "fix_appeal_prompt"), { reply_markup: { force_reply: true } });
+  });
+
   priv.callbackQuery("redo", async (ctx) => {
     const d = await db.getDriver(DB, ctx.from.id);
     const lang = langOf(d);
@@ -371,7 +390,8 @@ function register(bot, env) {
     const d = await db.getDriver(DB, ctx.from.id);
     const lang = d ? langOf(d) : (await userLang(ctx)) ?? "am";
     if (!d) return ctx.reply(T(lang, "fill_form_first"), { reply_markup: formButton(env, lang) });
-    if (d.status !== "awaiting_docs") return ctx.reply(T(lang, "docs_already", { status: T(lang, `status.${d.status}`) }));
+    const fixing = d.status === "suspended" && d.fix_docs && d.fix_state !== "submitted";
+    if (d.status !== "awaiting_docs" && !fixing) return ctx.reply(T(lang, "docs_already", { status: T(lang, `status.${d.status}`) }));
 
     let fileId, fileType;
     if (ctx.message.photo) {
@@ -382,6 +402,18 @@ function register(bot, env) {
       if (!/^(image\/|application\/pdf)/.test(doc.mime_type ?? "")) return ctx.reply(T(lang, "doc_only_photo"));
       fileId = doc.file_id;
       fileType = /^image\//.test(doc.mime_type) && (doc.file_size ?? 0) <= 10 * 1024 * 1024 ? "photo" : "document";
+    }
+    if (fixing) {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const have = new Set((await db.getDocs(DB, d.tg_id)).map((x) => x.kind));
+        const next = d.fix_docs.split(",").find((k) => !have.has(k));
+        if (!next) return A.askFixDoc(ctx.api, env, d.tg_id);
+        if (await db.insertDoc(DB, d.tg_id, next, fileId, fileType)) {
+          await ctx.reply(T(lang, "doc_received", { label: t(lang, `docs.${next}`)[0] }));
+          return A.askFixDoc(ctx.api, env, d.tg_id);
+        }
+      }
+      return;
     }
     // በአንድ ጊዜ ብዙ ፎቶ ሲላክ እያንዳንዱ ወደ ቀጣዩ ባዶ ቦታ ይገባል
     for (let attempt = 0; attempt < 4; attempt++) {
@@ -399,6 +431,9 @@ function register(bot, env) {
     const d = await db.getDriver(DB, ctx.from.id);
     const lang = d ? langOf(d) : (await userLang(ctx)) ?? "am";
     if (d?.status === "awaiting_docs") return ctx.reply(T(lang, "send_doc_hint"));
+    if (d?.status === "suspended" && d.fix_state === "appeal_wait" && ctx.message.text?.trim()) {
+      return A.fixSubmitted(env, ctx.api, d.tg_id, "appeal", ctx.message.text.trim());
+    }
     if (d) return showStatus(ctx, lang);
     return ctx.reply(T(lang, "unknown"));
   });

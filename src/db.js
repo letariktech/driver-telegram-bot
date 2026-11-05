@@ -17,6 +17,8 @@ const COLUMNS = {
   appt_text: "TEXT", appt_at: "TEXT", appt_confirmed: "INTEGER DEFAULT 0",
   driver_no: "INTEGER", activated_at: "TEXT",
   referral_rewarded_at: "TEXT", referral_paid_at: "TEXT",
+  agreement_version: "INTEGER", agreement_accepted_at: "TEXT",
+  fix_state: "TEXT", fix_docs: "TEXT", fix_note: "TEXT", fix_submitted_at: "TEXT", appeal_text: "TEXT",
   reminder_count: "INTEGER DEFAULT 0", last_reminded_at: "TEXT",
   // የቀድሞ ስሪት (v2) አምዶች — ለማሻሻያ ብቻ
   test_at: "TEXT", test_confirmed: "INTEGER DEFAULT 0",
@@ -45,6 +47,7 @@ export async function ensureSchema(db) {
     db.prepare(`CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, tg_id INTEGER, actor TEXT,
       type TEXT NOT NULL, detail TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
     db.prepare(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`),
   ]);
 
   const { results } = await db.prepare("PRAGMA table_info(drivers)").all();
@@ -113,6 +116,28 @@ async function migrateValues(db) {
 export const getDriver = (db, id) => db.prepare("SELECT * FROM drivers WHERE tg_id = ?").bind(id).first();
 export const findByPhone = (db, phone) => db.prepare("SELECT * FROM drivers WHERE phone = ?").bind(phone).first();
 export const findByCode = (db, no) => db.prepare("SELECT * FROM drivers WHERE driver_no = ?").bind(no).first();
+
+/** የታገደ አሽከርካሪ መረጃውን ሲያስተካክል — ሁኔታው አይቀየርም */
+export async function updateProfile(db, id, p) {
+  const fields = PROFILE_FIELDS.filter((f) => f !== "referral" && f !== "referrer_id");
+  await db.prepare(`UPDATE drivers SET ${fields.map((f) => `${f} = ?`).join(", ")}, updated_at = datetime('now') WHERE tg_id = ?`)
+    .bind(...fields.map((f) => p[f] ?? null), id).run();
+}
+
+export const setAgreement = (db, id, version) =>
+  db.prepare("UPDATE drivers SET agreement_version = ?, agreement_accepted_at = datetime('now') WHERE tg_id = ?").bind(version, id).run();
+
+/** የእገዳ ማስተካከያ ሁኔታ */
+export const setFix = (db, id, f) => {
+  const keys = Object.keys(f);
+  return db.prepare(`UPDATE drivers SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = datetime('now') WHERE tg_id = ?`).bind(...keys.map((k) => f[k]), id).run();
+};
+export const clearFix = (db, id) =>
+  db.prepare("UPDATE drivers SET fix_state = NULL, fix_docs = NULL, fix_note = NULL, fix_submitted_at = NULL, appeal_text = NULL WHERE tg_id = ?").bind(id).run();
+export async function submittedFixes(db) {
+  const { results } = await db.prepare("SELECT * FROM drivers WHERE status = 'suspended' AND fix_state = 'submitted' ORDER BY fix_submitted_at ASC").all();
+  return results;
+}
 
 export async function saveProfile(db, id, username, lang, p) {
   const cols = PROFILE_FIELDS.join(", ");

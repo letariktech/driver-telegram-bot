@@ -68,6 +68,11 @@
   .card dt { color: var(--hint); flex: none; } .card dd { margin: 0; text-align: right; font-weight: 600; }
   .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; font-weight: 400; }
   .check input { width: 20px; height: 20px; flex: none; margin-top: 2px; appearance: auto; -webkit-appearance: checkbox; }
+  .agreement { background: var(--bg2); border-radius: var(--radius); margin-bottom: 14px; }
+  .agreement summary { padding: 12px 14px; font-weight: 700; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .agreement summary span { font-weight: 400; color: var(--hint); font-size: 13px; }
+  .agreement pre { white-space: pre-wrap; font: 13.5px/1.6 inherit; font-family: inherit; margin: 0; padding: 0 14px 14px; max-height: 46vh; overflow-y: auto; }
+  .banner { background: color-mix(in srgb, var(--danger) 12%, var(--bg)); color: var(--danger); border-radius: var(--radius); padding: 11px 14px; font-size: 14px; font-weight: 600; margin-bottom: 14px; }
   .error { color: var(--danger); font-size: 14px; min-height: 20px; margin-top: 8px; }
   .center { text-align: center; padding: 48px 12px; }
   .center .icon { font-size: 56px; } .center h2 { margin: 12px 0 6px; } .center p { color: var(--hint); margin: 0; }
@@ -83,6 +88,7 @@
 
   <form id="form" hidden novalidate>
     <div class="top"><div class="brand">🚖 __BRAND__ Driver</div><div class="langs" id="langs"></div></div>
+    <div class="banner" id="susp-banner" hidden data-t="suspended_edit"></div>
     <div class="steps"></div>
     <div class="kicker" id="kicker"></div>
     <h1 id="title"></h1>
@@ -164,6 +170,8 @@
 
     <section data-t="s5" data-lead="s5_lead">
       <dl class="card" id="review"></dl>
+      <details class="agreement" id="agreement"><summary><b data-t="agreement_title"></b><span id="ag-ver"></span></summary><pre id="ag-text"></pre></details>
+      <label class="check" style="margin-bottom:10px"><input type="checkbox" id="agree"><span data-t="agree"></span></label>
       <label class="check"><input type="checkbox" id="consent"><span data-t="consent"></span></label>
     </section>
 
@@ -181,7 +189,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var $$ = function (s) { return [].slice.call(document.querySelectorAll(s)); };
   var sections = $$("section");
-  var step = 0, busy = false, lang = "am", state = { vehicle_mode: null };
+  var step = 0, busy = false, lang = "am", state = { vehicle_mode: null }, AG = { version: 0, texts: {} };
   var useMain = !!(tg && tg.MainButton && tg.platform && tg.platform !== "unknown");
   var TODAY = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10), YEAR = +TODAY.slice(0, 4);
   var phoneOk = function (v) { return /^(\+?251|0)?[79]\d{8}$/.test(String(v || "").replace(/[\s\-()]/g, "")); };
@@ -205,9 +213,12 @@
       [].forEach.call(sel.options, function (o, i) { o.textContent = i === 0 ? (sel.id === "plate_region" ? F("plate_region") : F("choose")) : L(sel.dataset.group, o.value); });
     });
     $$(".chips").forEach(function (box) { [].forEach.call(box.children, function (b) { b.textContent = box.id === "vehicle_ac" ? L("ac", b.dataset.v) : box.dataset.group ? L(box.dataset.group, b.dataset.v) : b.dataset.v; }); });
-    $$("#vehicle_mode button").forEach(function (b) { b.firstChild.textContent = L("mode", b.dataset.v); b.lastChild.textContent = F("mode_hint_" + b.dataset.v); });
+    $$("#vehicle_mode button").forEach(function (b) { b.firstChild.textContent = L("mode", b.dataset.v); b.lastChild.textContent = b.dataset.v === "none" && !O.TEST_FOR_NO_CAR ? "" : F("mode_hint_" + b.dataset.v); });
     $$("#langs button").forEach(function (b) { b.classList.toggle("sel", b.dataset.l === lang); });
     $("fb-back").textContent = F("back");
+    $("ag-text").textContent = AG.texts[lang] || AG.texts.am || "";
+    $("ag-ver").textContent = AG.version ? F("agreement_ver", { v: AG.version }) : "";
+    if (!O.TEST_FOR_NO_CAR) { $("no-car-note").textContent = ""; }
     updateCarNotes();
     if (!$("form").hidden) render(true);
   }
@@ -309,7 +320,10 @@
       }
     } else if (step === 3) {
       chip("services", F("e_services")); chip("shift", F("e_select")); chip("phone_type", F("e_select"));
-    } else if (step === 4 && !$("consent").checked) e.push(F("e_consent"));
+    } else if (step === 4) {
+      if (!$("agree").checked) { e.push(F("e_agree")); $("agreement").open = true; }
+      else if (!$("consent").checked) e.push(F("e_consent"));
+    }
     return e[0] || "";
   }
 
@@ -382,11 +396,11 @@
   function submit() {
     busy = true;
     if (useMain) tg.MainButton.showProgress(false); else $("fb-next").disabled = true;
-    api("/api/register", { profile: profile(), lang: lang }).then(function (res) {
+    api("/api/register", { profile: profile(), lang: lang, agree: AG.version }).then(function (res) {
       if (!res.ok) throw new Error(res.error || F("e_network"));
       haptic("success");
       try { tg.disableClosingConfirmation(); } catch (e) {}
-      message("✅", F("ok_title"), F("ok_text"));
+      if (res.suspended) message("✅", F("ok_title"), F("locked_text")); else message("✅", F("ok_title"), F("ok_text"));
       setTimeout(function () { if (tg) tg.close(); }, 2500);
     }).catch(function (e) { $("error").textContent = e.message || F("e_network"); haptic("error"); })
       .then(function () { busy = false; if (useMain) tg.MainButton.hideProgress(); else $("fb-next").disabled = false; });
@@ -423,7 +437,9 @@
     if (d && d.status === "pending") return message("⏳", F("locked_pending"), F("locked_text"));
     if (d && ["test", "inspection", "orientation"].indexOf(d.status) >= 0) return message("📅", F("locked_stage"), F("locked_text"));
     if (d && d.status === "active") return message("🎉", F("locked_active"), F("locked_text"));
-    if (d && d.status === "suspended") return message("⛔", F("locked_suspended"), F("locked_text"));
+    if (res.agreement) { AG = res.agreement; applyLang(); }
+    if (d && d.status === "suspended" && d.fix_state === "submitted") return message("⛔", F("locked_suspended"), F("locked_text"));
+    if (d && d.status === "suspended") $("susp-banner").hidden = false;
     prefill(d, res.user, res.ref_code);
     show("form"); render();
     if (d && d.status === "rejected" && d.reject_reason) {

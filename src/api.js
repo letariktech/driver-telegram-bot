@@ -4,7 +4,8 @@ import { verifyInitData } from "./auth.js";
 import * as C from "./constants.js";
 import * as db from "./db.js";
 import { t, pickLang } from "./i18n.js";
-import { askNextDocument, resolveReferrer, brand } from "./actions.js";
+import { askNextDocument, resolveReferrer, brand, fixSubmitted } from "./actions.js";
+import { loadSettings, agreementText } from "./settings.js";
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
@@ -101,7 +102,7 @@ export function validateProfile(input, today = C.addisToday()) {
 const SPLIT = ["languages", "prev_platforms", "services"];
 const publicDriver = (d) => {
   if (!d) return null;
-  const out = { status: d.status, reject_reason: d.reject_reason, lang: d.lang };
+  const out = { status: d.status, reject_reason: d.reject_reason, lang: d.lang, fix_state: d.fix_state };
   for (const f of db.PROFILE_FIELDS) out[f] = d[f];
   for (const f of SPLIT) out[f] = d[f] ? d[f].split(",") : [];
   out.vehicle_ac = d.vehicle_ac == null ? null : !!d.vehicle_ac;
@@ -121,11 +122,16 @@ export async function handleApi(request, env, path, getBot) {
   const lang = (path === "/api/register" && formLang) || existing?.lang || prefs?.lang || pickLang(user.language_code);
 
   if (path === "/api/me") {
-    return json({ lang: existing?.lang || prefs?.lang || null, ref_code: prefs?.ref_code ?? null, user: { first_name: user.first_name, last_name: user.last_name }, driver: publicDriver(existing) });
+    const settings = await loadSettings(env);
+    return json({
+      agreement: { version: settings.agreement.version ?? 1, texts: Object.fromEntries(C.LANGS.map((x) => [x, agreementText(settings, x)])), accepted: existing?.agreement_version ?? null },
+      lang: existing?.lang || prefs?.lang || null, ref_code: prefs?.ref_code ?? null, user: { first_name: user.first_name, last_name: user.last_name }, driver: publicDriver(existing) });
   }
 
   // /api/register
-  if (existing && !["awaiting_docs", "rejected"].includes(existing.status)) {
+  const suspended = existing?.status === "suspended";
+  if (suspended && existing.fix_state === "submitted") return json({ error: t(lang, "fix_submitted", { brand: brand(env) }), code: "locked" }, 409);
+  if (existing && !suspended && !["awaiting_docs", "rejected"].includes(existing.status)) {
     return json({ error: t(lang, existing.status === "active" ? "f.locked_active" : "f.locked_stage"), code: "locked" }, 409);
   }
   const { profile, error, vars } = validateProfile(body?.profile);
@@ -134,12 +140,26 @@ export async function handleApi(request, env, path, getBot) {
   const owner = await db.findByPhone(env.DB, profile.phone);
   if (owner && owner.tg_id !== user.id) return json({ error: t(lang, "f.e_phone_taken"), code: "phone_taken" }, 409);
 
+  const settings = await loadSettings(env);
+  const agreementVersion = settings.agreement.version ?? 1;
+  if (Number(body?.agree) !== agreementVersion) return json({ error: t(lang, "f.e_agree", { brand: brand(env) }), code: "agree" }, 422);
+
+  if (suspended) {
+    // የታገደ አሽከርካሪ፦ መረጃው ይዘመናል፣ ሁኔታው አይቀየርም፣ ለአስተዳዳሪ ይላካል
+    await db.updateProfile(env.DB, user.id, profile);
+    await db.setAgreement(env.DB, user.id, agreementVersion);
+    await db.logEvent(env.DB, user.id, "driver", "form_updated", "እገዳ ለማንሳት");
+    try { await fixSubmitted(env, getBot(env).api, user.id, "form"); } catch (e) { console.error("fixSubmitted failed", e); }
+    return json({ ok: true, suspended: true });
+  }
+
   const ref = await resolveReferrer(env, profile.referral || prefs?.ref_code, user.id);
   profile.referrer_id = ref?.tg_id ?? existing?.referrer_id ?? null;
   if (!profile.referral && prefs?.ref_code) profile.referral = prefs.ref_code;
 
   if (existing && (existing.status === "rejected" || existing.vehicle_mode !== profile.vehicle_mode)) await db.clearDocs(env.DB, user.id);
   await db.saveProfile(env.DB, user.id, user.username ?? null, lang, profile);
+  await db.setAgreement(env.DB, user.id, agreementVersion);
   if (formLang && formLang !== prefs?.lang) await db.setLang(env.DB, user.id, formLang);
   await db.logEvent(env.DB, user.id, "driver", existing ? "form_updated" : "registered", existing?.status === "rejected" ? "ዳግም ማመልከቻ" : null);
 

@@ -26,14 +26,14 @@ crons = ["0 6 * * *"]
 
 [vars]
 BRAND_NAME = "Cabby"
-SUPPORT_CONTACT = "@Cabby_Et"        # ለምሳሌ "0911000000 ወይም @cabby_support"
+SUPPORT_CONTACT = ""        # ለምሳሌ "0911000000 ወይም @cabby_support"
 # ሲጸድቁ ለአሽከርካሪው የሚላኩ የመተግበሪያ ሊንኮች (እንደ መረጠው አገልግሎት እና ስልክ)
-SHARE_ANDROID_URL = "https://play.google.com/store/apps/details?id=com.car.poolsharedriver&pcampaignid=web_share"      # Cabby Share — Google Play
-SHARE_IOS_URL = "https://cabbyet.com/"          # Cabby Share — App Store
-RESERVE_ANDROID_URL = "https://play.google.com/store/apps/details?id=com.car.gocabbydriver&pcampaignid=web_share"    # Cabby Reserve — Google Play
-RESERVE_IOS_URL = "https://cabbyet.com/"        # Cabby Reserve — App Store
-DRIVER_GROUP_LINK = "https://t.me/cabbyshareET"      # የአሽከርካሪዎች ግሩፕ ሊንክ
-REFERRAL_REWARD = "50 ብር"        # ለምሳሌ "300 ብር" — ባዶ ከሆነ መጠኑ አይጠቀስም
+SHARE_ANDROID_URL = ""      # Cabby Share — Google Play
+SHARE_IOS_URL = ""          # Cabby Share — App Store
+RESERVE_ANDROID_URL = ""    # Cabby Reserve — Google Play
+RESERVE_IOS_URL = ""        # Cabby Reserve — App Store
+DRIVER_GROUP_LINK = ""      # የአሽከርካሪዎች ግሩፕ ሊንክ
+REFERRAL_REWARD = ""        # ለምሳሌ "300 ብር" — ባዶ ከሆነ መጠኑ አይጠቀስም
 
 # ሚስጥሮች (በ `npx wrangler secret put` ወይም በdashboard → Settings → Variables and Secrets)፦
 #   BOT_TOKEN       — ከ @BotFather

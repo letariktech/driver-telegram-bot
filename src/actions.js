@@ -95,7 +95,7 @@ export function summary(d, full = false) {
   return lines.join("\n");
 }
 
-const STAGE_AM = { test: "የቃል እና የተግባር ፈተና", inspection: "የመኪና ፍተሻ", orientation: "ስልጠና" };
+const STAGE_AM = { test: "የቃል እና የተግባር ፈተና", inspection: "የመኪና ፍተሻ", orientation: "ስልጠና", active: "ገቢር" };
 
 export function reviewCard(d, note = "") {
   const code = driverCode(d);
@@ -108,7 +108,15 @@ export function reviewCard(d, note = "") {
   if (d.reject_reason && (d.status === "rejected" || d.status === "suspended")) {
     extra.push(`📝 <b>ምክንያት፦</b> ${esc(C.REJECT_REASONS.includes(d.reject_reason) ? t("am", `reasons.${d.reject_reason}`, { brand: "Cabby" }) : d.reject_reason)}`);
   }
+  if (d.status === "suspended" && d.fix_state) {
+    const st = { open: "አሽከርካሪው እያስተካከለ ነው", appeal_wait: "ማብራሪያ እየጻፈ ነው", submitted: "✅ ማስተካከያ አቅርቧል — ይገምግሙ" }[d.fix_state] ?? d.fix_state;
+    extra.push(`🛠 <b>ማስተካከያ፦</b> ${st}`);
+    if (d.fix_docs) extra.push(`   የተጠየቁ ሰነዶች፦ ${esc(d.fix_docs.split(",").map((k) => t("am", `docs.${k}`)?.[0] ?? k).join("፣ "))}`);
+    if (d.fix_note) extra.push(`   ማስታወሻ፦ ${esc(d.fix_note)}`);
+    if (d.appeal_text) extra.push(`   ✍️ የአሽከርካሪው ማብራሪያ፦ <i>${esc(d.appeal_text)}</i>`);
+  }
   if (d.reviewed_by) extra.push(`👮 <b>የመጨረሻ ውሳኔ፦</b> ${esc(d.reviewed_by)}`);
+  if (d.agreement_version) extra.push(`📄 ውል v${d.agreement_version} ተቀብሏል`);
   return (
     `🚖 <b>${code ? `${code} · ` : ""}የአሽከርካሪ ማመልከቻ</b>${C.isGreen(d) ? " ⚡" : ""}\n\n${summary(d, true)}\n\n` +
     `🆔 <code>${d.tg_id}</code>${d.username ? ` · @${esc(d.username)}` : ""}\n` +
@@ -136,6 +144,7 @@ export function cardKeyboard(d) {
     kb.text("⛔ አግድ", `sus:${id}`);
   } else if (d.status === "suspended") {
     kb.text("♻️ እገዳ አንሳ", `uns:${id}`);
+    if (d.fix_state === "submitted") kb.text("↩️ አልበቃም", `fixno:${id}`);
   } else return undefined;
   return kb;
 }
@@ -164,11 +173,11 @@ export async function notifyAdmins(api, env, text, extra = {}) {
   }
 }
 
-async function deliverApplication(api, env, d, docs) {
+async function deliverApplication(api, env, d, docs, header = null) {
   const chat = adminChat(env);
   let reason = "ADMIN_CHAT_ID አልተቀመጠም";
   if (chat) {
-    try { return await sendReview(api, chat, d, docs); } catch (e) { reason = e.description ?? e.message; console.error("admin notify failed", chat, reason); }
+    try { if (header) await api.sendMessage(chat, header, HTML); return await sendReview(api, chat, d, docs); } catch (e) { reason = e.description ?? e.message; console.error("admin notify failed", chat, reason); }
   }
   for (const id of adminIds(env).filter((x) => x !== chat)) {
     try {
@@ -216,6 +225,7 @@ export async function approveDocs(env, api, id, actor) {
   const d = await db.getDriver(env.DB, id);
   if (d?.status !== "pending") return stale;
   const stage = C.stageAfterDocs(d, year());
+  if (stage === "active") return activate(env, api, id, actor, "ሰነዶች ጸድቀዋል");
   if (!(await db.transition(env.DB, id, stage, { from: "pending", by: actor, appt: null }))) return stale;
   await db.logEvent(env.DB, id, actor, "docs_approved", stage);
   const lang = langOf(d);
@@ -268,7 +278,7 @@ export async function schedule(env, api, id, actor, { at = null, text = null } =
 export async function pass(env, api, id, actor) {
   const d = await db.getDriver(env.DB, id);
   if (!d || !C.APPOINTMENT_STAGES.includes(d.status)) return stale;
-  if (d.status === "orientation") return activate(env, api, id, actor, "ስልጠና ወስዷል");
+  if (d.status === "orientation" || C.stageAfterPass() === "active") return activate(env, api, id, actor, d.status === "orientation" ? "ስልጠና ወስዷል" : `${d.status} አለፈ`);
   if (!(await db.transition(env.DB, id, "orientation", { from: d.status, by: actor, appt: null }))) return stale;
   await db.logEvent(env.DB, id, actor, "passed", d.status);
   await send(api, id, T(env, langOf(d), d.status === "test" ? "passed_test" : "passed_inspection"));
@@ -295,11 +305,11 @@ export function appButtons(env, d, lang) {
   for (const s of ["share", "reserve"]) {
     if (!services.includes(s)) continue;
     for (const o of os) {
-      const url = env[`${s.toUpperCase()}_${o === "ios" ? "IOS" : "ANDROID"}_URL`];
+      const url = C.cfg(env, `${s.toUpperCase()}_${o === "ios" ? "IOS" : "ANDROID"}_URL`);
       if (url) kb.url(T(env, lang, `btn_app_${s}_${o}`), url).row();
     }
   }
-  if (env.DRIVER_GROUP_LINK) kb.url(T(env, lang, "btn_group"), env.DRIVER_GROUP_LINK);
+  if (C.cfg(env, "DRIVER_GROUP_LINK")) kb.url(T(env, lang, "btn_group"), C.cfg(env, "DRIVER_GROUP_LINK"));
   return kb.inline_keyboard.flat().length ? kb : undefined;
 }
 
@@ -312,14 +322,15 @@ export async function activate(env, api, id, actor, how = "") {
   const code = driverCode(d);
   await send(api, id, T(env, lang, "activated", { name: esc(d.full_name.split(" ")[0]), code }), { reply_markup: appButtons(env, d, lang) });
   const link = await referralLink(api, env, d);
-  if (link) await send(api, id, T(env, lang, "referral_share", { link, reward: env.REFERRAL_REWARD ? ` (${esc(env.REFERRAL_REWARD)})` : "" }));
+  const reward = C.cfg(env, "REFERRAL_REWARD");
+  if (link) await send(api, id, T(env, lang, "referral_share", { link, reward: reward ? ` (${esc(reward)})` : "" }));
 
   // የጠቆመው ሰው ሽልማት ማሳወቂያ
   if (d.referrer_id && !d.referral_rewarded_at) {
     const ref = await db.getDriver(env.DB, d.referrer_id);
     if (ref?.status === "active") {
       const rl = langOf(ref);
-      await send(api, ref.tg_id, T(env, rl, "referral_reward", { name: esc(d.full_name), reward: env.REFERRAL_REWARD ? T(env, rl, "reward_suffix", { reward: esc(env.REFERRAL_REWARD) }) : "" }));
+      await send(api, ref.tg_id, T(env, rl, "referral_reward", { name: esc(d.full_name), reward: reward ? T(env, rl, "reward_suffix", { reward: esc(reward) }) : "" }));
       await db.markReferralRewarded(env.DB, id);
       await db.logEvent(env.DB, ref.tg_id, "system", "referral_reward", `${d.full_name} (${code})`);
     }
@@ -327,21 +338,80 @@ export async function activate(env, api, id, actor, how = "") {
   return { ok: true, driver: d };
 }
 
-export async function suspend(env, api, id, actor, reason = "other") {
-  if (!(await db.transition(env.DB, id, "suspended", { from: "active", by: actor, reason }))) return stale;
-  await db.logEvent(env.DB, id, actor, "suspended", reason);
-  const d = await db.getDriver(env.DB, id);
+/** የእገዳ መልዕክት ከማስተካከያ አዝራሮች ጋር */
+export function suspendNotice(env, d) {
   const lang = langOf(d);
-  const text = C.REJECT_REASONS.includes(reason) ? T(env, lang, `reasons.${reason}`) : reason;
-  await send(api, id, T(env, lang, "suspended", { reason: esc(text) }));
+  const reason = C.REJECT_REASONS.includes(d.reject_reason) ? T(env, lang, `reasons.${d.reject_reason}`) : d.reject_reason;
+  let text = T(env, lang, "suspended", { reason: esc(reason) });
+  if (d.fix_note) text += `\n${T(env, lang, "fix_note", { note: esc(d.fix_note) })}`;
+  if (d.fix_state === "submitted") return { text: `${text}\n\n${T(env, lang, "fix_submitted")}`, kb: undefined };
+  const docs = (d.fix_docs ?? "").split(",").filter(Boolean);
+  if (docs.length) text += `\n\n${T(env, lang, "fix_docs_needed", { list: docs.map((k) => t(lang, `docs.${k}`)[0]).join(", ") })}`;
+  text += `\n\n${T(env, lang, "fix_how")}`;
+  const kb = new InlineKeyboard();
+  if (docs.length) kb.text(T(env, lang, "btn_fix_docs"), "fx:docs").row();
+  kb.webApp(T(env, lang, "btn_fix_form"), formUrl(env)).row().text(T(env, lang, "btn_fix_appeal"), "fx:appeal");
+  return { text, kb };
+}
+
+export async function suspend(env, api, id, actor, reason = "other", { docs = [], note = "" } = {}) {
+  docs = (Array.isArray(docs) ? docs : []).filter((k) => C.DOCUMENTS.some((x) => x.kind === k));
+  note = String(note ?? "").trim().slice(0, 500);
+  if (!(await db.transition(env.DB, id, "suspended", { from: "active", by: actor, reason }))) return stale;
+  for (const k of docs) await db.deleteDoc(env.DB, id, k);
+  await db.setFix(env.DB, id, { fix_state: "open", fix_docs: docs.join(",") || null, fix_note: note || null, fix_submitted_at: null, appeal_text: null });
+  const reasonAm = C.REJECT_REASONS.includes(reason) ? t("am", `reasons.${reason}`, { brand: brand(env) }) : reason;
+  await db.logEvent(env.DB, id, actor, "suspended", [reasonAm, docs.length ? `ሰነዶች፦ ${docs.map((k) => t("am", `docs.${k}`)[0]).join("፣ ")}` : "", note].filter(Boolean).join(" · "));
+  const d = await db.getDriver(env.DB, id);
+  const n = suspendNotice(env, d);
+  await send(api, id, n.text, { reply_markup: n.kb });
   return { ok: true, driver: d };
 }
 
 export async function unsuspend(env, api, id, actor) {
   if (!(await db.transition(env.DB, id, "active", { from: "suspended", by: actor }))) return stale;
+  await db.clearFix(env.DB, id);
   await db.logEvent(env.DB, id, actor, "unsuspended");
   const d = await db.getDriver(env.DB, id);
-  await send(api, id, T(env, langOf(d), "unsuspended"));
+  await send(api, id, T(env, langOf(d), "unsuspended"), { reply_markup: appButtons(env, d, langOf(d)) });
+  return { ok: true, driver: d };
+}
+
+/** የታገደው አሽከርካሪ የተጠየቀውን ሰነድ እንዲልክ */
+export async function askFixDoc(api, env, id) {
+  const d = await db.getDriver(env.DB, id);
+  if (d?.status !== "suspended" || !d.fix_docs) return null;
+  const lang = langOf(d);
+  const need = d.fix_docs.split(",");
+  const have = new Set((await db.getDocs(env.DB, id)).map((x) => x.kind));
+  const next = need.find((k) => !have.has(k));
+  if (!next) return fixSubmitted(env, api, id, "docs");
+  await api.sendMessage(id, T(env, lang, "doc_step", { i: need.indexOf(next) + 1, n: need.length, prompt: t(lang, `docs.${next}`)[1] }), HTML);
+  return next;
+}
+
+/** አሽከርካሪው ማስተካከያ አቀረበ (ሰነድ፣ ቅጽ ወይም ማብራሪያ) → ለአስተዳዳሪዎች */
+export async function fixSubmitted(env, api, id, how, detail = null) {
+  const d0 = await db.getDriver(env.DB, id);
+  if (d0?.status !== "suspended") return null;
+  await db.setFix(env.DB, id, { fix_state: "submitted", fix_submitted_at: new Date().toISOString().replace("T", " ").slice(0, 19), ...(how === "appeal" ? { appeal_text: String(detail ?? "").slice(0, 2000) } : {}) });
+  await db.logEvent(env.DB, id, "driver", "fix_submitted", { docs: "ሰነዶች ላከ", form: "መረጃውን አስተካከለ", appeal: `ማብራሪያ፦ ${detail ?? ""}` }[how] ?? how);
+  const d = await db.getDriver(env.DB, id);
+  await send(api, id, T(env, langOf(d), "fix_submitted"));
+  const docs = how === "docs" ? (await db.getDocs(env.DB, id)).filter((x) => (d.fix_docs ?? "").split(",").includes(x.kind)) : [];
+  await deliverApplication(api, env, d, docs, `♻️ <b>${esc(d.full_name)}</b> (${esc(driverCode(d))}) እገዳውን ለማንሳት ማስተካከያ አቅርቧል።`);
+  return d;
+}
+
+export async function rejectFix(env, api, id, actor, note = "") {
+  const d0 = await db.getDriver(env.DB, id);
+  if (d0?.status !== "suspended" || d0.fix_state !== "submitted") return stale;
+  note = String(note ?? "").trim().slice(0, 500);
+  await db.setFix(env.DB, id, { fix_state: "open", fix_submitted_at: null, ...(note ? { fix_note: note } : {}) });
+  await db.logEvent(env.DB, id, actor, "fix_rejected", note || null);
+  const d = await db.getDriver(env.DB, id);
+  const n = suspendNotice(env, d);
+  await send(api, id, `${T(env, langOf(d), "fix_rejected")}\n\n${n.text}`, { reply_markup: n.kb });
   return { ok: true, driver: d };
 }
 

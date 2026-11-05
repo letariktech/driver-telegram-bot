@@ -5,6 +5,7 @@ import * as db from "./db.js";
 import * as A from "./actions.js";
 import { STRINGS, t } from "./i18n.js";
 import { signToken, verifyToken, verifyInitData } from "./auth.js";
+import { loadSettings, saveSettings, DEFAULT_AGREEMENT } from "./settings.js";
 
 const COOKIE = "cabby_admin";
 const SESSION_DAYS = 7;
@@ -116,7 +117,8 @@ const ACTIONS = {
   pass: (env, api, id, who) => A.pass(env, api, id, who),
   fail: (env, api, id, who, b) => A.fail(env, api, id, who, b.reason),
   activate: (env, api, id, who) => A.activate(env, api, id, who, "በዳሽቦርድ"),
-  suspend: (env, api, id, who, b) => A.suspend(env, api, id, who, b.reason),
+  suspend: (env, api, id, who, b) => A.suspend(env, api, id, who, b.reason, { docs: b.docs, note: b.note }),
+  reject_fix: (env, api, id, who, b) => A.rejectFix(env, api, id, who, b.note),
   unsuspend: (env, api, id, who) => A.unsuspend(env, api, id, who),
   note: (env, api, id, who, b) => A.addNote(env, id, who, b.text),
   message: async (env, api, id, who, b) => {
@@ -143,15 +145,16 @@ export async function handleAdminApi(request, env, path, getBot) {
         return json({
           admin: who, brand: A.brand(env),
           labels: { status: STRINGS.am.status, docs: Object.fromEntries(Object.entries(STRINGS.am.docs).map(([k, v]) => [k, v[0]])), reasons: Object.fromEntries(C.REJECT_REASONS.map((r) => [r, t("am", `reasons.${r}`, { brand: A.brand(env) })])), opt: STRINGS.am.opt },
-          rules: { min_age: C.MIN_AGE, max_age: C.MAX_AGE, max_vehicle_age: C.MAX_VEHICLE_AGE, inspection_after: C.INSPECTION_AFTER_YEARS },
-          statuses: C.STATUSES,
+          rules: { min_age: C.MIN_AGE, max_age: C.MAX_AGE, max_vehicle_age: C.MAX_VEHICLE_AGE, inspection_after: C.INSPECTION_AFTER_YEARS, test_for_no_car: C.TEST_FOR_NO_CAR, require_orientation: C.REQUIRE_ORIENTATION },
+          statuses: C.STATUSES, suspend_reasons: C.SUSPEND_REASONS,
         });
       case "overview": {
-        const [s, pipeline, appts, events] = await Promise.all([
+        const [s, pipeline, appts, events, fixes] = await Promise.all([
           db.stats(DB),
           Promise.all(["awaiting_docs", "pending", "test", "inspection", "orientation"].map((st) => db.listByStatus(DB, st, 60))),
           db.appointments(DB),
           db.recentEvents(DB, 15),
+          db.submittedFixes(DB),
         ]);
         const recentActive = (await db.searchDrivers(DB, { status: "active", sort: "code", limit: 12 })).rows;
         return json({
@@ -159,6 +162,7 @@ export async function handleAdminApi(request, env, path, getBot) {
           pipeline: Object.fromEntries(["awaiting_docs", "pending", "test", "inspection", "orientation"].map((st, i) => [st, pipeline[i].map(card)])),
           active: recentActive.map(card),
           appointments: appts.map(card),
+          fixes: fixes.map((d) => ({ ...card(d), fix_submitted_at: d.fix_submitted_at, reject_reason: d.reject_reason })),
           events,
         });
       }
@@ -188,6 +192,18 @@ export async function handleAdminApi(request, env, path, getBot) {
            WHERE d.status = 'active' ORDER BY d.referral_paid_at IS NOT NULL, d.activated_at DESC LIMIT 200`).all();
         return json({ board, payouts: unpaid.map((d) => ({ ...card(d), referrer_name: d.referrer_name, referrer_code: d.referrer_no ? `CB${d.referrer_no}` : null, referrer_telebirr: d.referrer_telebirr, paid_at: d.referral_paid_at, activated_at: d.activated_at })), reward: env.REFERRAL_REWARD || null });
       }
+      case "settings": {
+        const st = await loadSettings(env, true);
+        return json({
+          ...st,
+          defaults: { rules: C.RULE_DEFAULTS, agreement: DEFAULT_AGREEMENT },
+          env_links: Object.fromEntries(C.LINK_KEYS.map((k) => [k, env[k] || ""])),
+          options: {
+            grades: C.LICENSE_GRADES, fuels: C.FUEL_TYPES, langs: C.LANGS,
+            docs: C.DOCUMENTS.map((d) => ({ kind: d.kind, label: t("am", `docs.${d.kind}`)[0], core: C.CORE_DOCS.includes(d.kind), when: d.when ? (d.kind === "authorization" ? "other" : "car") : "all" })),
+          },
+        });
+      }
       case "export.csv": {
         const csv = await toCsv(env);
         return new Response(csv?.text ?? "﻿", { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${csv?.name ?? "cabby-drivers.csv"}"` } });
@@ -204,6 +220,10 @@ export async function handleAdminApi(request, env, path, getBot) {
       const res = await ACTIONS[seg[2]](env, getBot(env).api, id, `${who.name} (ዳሽቦርድ)`, body);
       const d = await db.getDriver(DB, id);
       return json({ ...res, driver: view(d) }, res.ok ? 200 : 409);
+    }
+    if (seg[0] === "settings") {
+      const res = await saveSettings(env, body, who.name);
+      return json(res, res.ok ? 200 : 422);
     }
     if (seg[0] === "referral" && seg[2] === "paid") return json(await A.markPaid(env, Number(seg[1]), `${who.name} (ዳሽቦርድ)`));
   }
