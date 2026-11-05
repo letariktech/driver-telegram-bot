@@ -12,6 +12,12 @@ import ADMIN_HTML from "./admin.html";
 import AGENT_HTML from "./agent.html";
 import { handleAgentApi } from "./agent-api.js";
 import { handleDocsApi } from "./docs-api.js";
+import LOGO from "./assets/cabby.png";
+import LOGO_WHITE from "./assets/cabby-white.png";
+import MARK from "./assets/mark.png";
+import FAVICON from "./assets/favicon.png";
+import APPLE from "./assets/apple.png";
+const ASSETS = { "cabby.png": LOGO, "cabby-white.png": LOGO_WHITE, "mark.png": MARK, "favicon.png": FAVICON, "apple.png": APPLE };
 
 // የቅጹ ምርጫዎች — ደንቦቹ በዳሽቦርድ ስለሚቀየሩ በቅንብሮች ስሪት ይታደሳል
 const pages = new Map();
@@ -51,6 +57,10 @@ export default {
     if (request.method === "GET" && path === "/" && !missing.length) {
       await ensureSchema(env.DB);
       await loadSettings(env);
+    }
+    if ((request.method === "GET" || request.method === "HEAD") && (path.startsWith("/assets/") || path === "/favicon.ico")) {
+      const a = ASSETS[path === "/favicon.ico" ? "favicon.png" : path.slice(8)];
+      if (a) return new Response(request.method === "HEAD" ? null : a, { headers: { "content-type": "image/png", "cache-control": "public, max-age=604800" } });
     }
     if (request.method === "GET") {
       if (path === "/") return html(page("form", FORM_HTML, brand));

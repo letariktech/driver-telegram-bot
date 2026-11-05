@@ -52,7 +52,7 @@ export const handleLogout = () =>
 
 const loginErrorPage = () => `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cabby</title><body style="font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;background:#f4f6f9;color:#14213d">
-<div style="max-width:340px;text-align:center"><div style="font-size:44px">🔒</div><h2>ሊንኩ አይሰራም</h2>
+<div style="max-width:340px;text-align:center"><img src="/assets/cabby.png" alt="Cabby" style="height:34px;margin-bottom:18px"><div style="font-size:40px">🔒</div><h2>ሊንኩ አይሰራም</h2>
 <p style="color:#5b6577">ሊንኩ ጊዜው አልፏል ወይም ቀድሞ ጥቅም ላይ ውሏል። በቦቱ ውስጥ <b>/dashboard</b> ብለው አዲስ ሊንክ ይውሰዱ።</p></div>`;
 
 // ---------- የአሽከርካሪ መረጃ ለዳሽቦርድ ----------

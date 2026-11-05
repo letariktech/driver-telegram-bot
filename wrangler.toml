@@ -11,6 +11,11 @@ type = "Text"
 globs = ["**/*.html"]
 fallthrough = true
 
+[[rules]]
+type = "Data"
+globs = ["**/*.png"]
+fallthrough = true
+
 # D1 ዳታቤዝ — ID ሳይኖር ሲቀር Cloudflare በመጀመሪያው deploy በራሱ ይፈጥረዋል
 [[d1_databases]]
 binding = "DB"

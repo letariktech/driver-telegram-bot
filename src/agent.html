@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>__BRAND__ Sales</title>
+<link rel="icon" href="/assets/favicon.png"><link rel="apple-touch-icon" href="/assets/apple.png"><meta name="theme-color" content="#865DFF">
+
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
     --bg: var(--tg-theme-bg-color, #ffffff); --bg2: var(--tg-theme-secondary-bg-color, #f2f4f7);
     --text: var(--tg-theme-text-color, #14213d); --hint: var(--tg-theme-hint-color, #7b8494);
-    --accent: var(--tg-theme-button-color, #1f5fbf); --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --accent: #7a4ff5; --accent-text: #ffffff;
     --danger: var(--tg-theme-destructive-text-color, #d64545); --green: #148a52; --signal: #b8860b;
     --line: color-mix(in srgb, var(--hint) 22%, transparent); --r: 12px;
   }
@@ -96,7 +98,7 @@
     var tabs = [["qr", "📱 QR"], ["drivers", "👥 አሽከርካሪዎቼ"], ["new", "➕ መዝግብ"]];
     if (sup) tabs.push(["team", "🧑‍💼 ቡድን"], ["campaigns", "📣 ካምፔኖች"]);
     document.getElementById("app").innerHTML =
-      '<div class="top"><div class="who"><div><b>' + h(D.staff.name) + "</b><small>" + h(D.staff.code) + " · " + (sup ? "ቡድን መሪ" : "ሴልስ") + '</small></div><span class="badge">' + h(D.brand) + " Sales</span></div>" +
+      '<div class="top"><div class="who"><div><b>' + h(D.staff.name) + "</b><small>" + h(D.staff.code) + " · " + (sup ? "ቡድን መሪ" : "ሴልስ") + '</small></div><span class="badge"><img src="/assets/cabby.png" alt="' + h(D.brand) + '" style="height:15px;vertical-align:-3px"> Sales</span></div>' +
       '<div class="tabs">' + tabs.map(function (t) { return '<button data-tab="' + t[0] + '" class="' + (tab === t[0] ? "on" : "") + '">' + t[1] + "</button>"; }).join("") + "</div></div><main id=\"main\"></main>";
     [].forEach.call(document.querySelectorAll("[data-tab]"), function (b) { b.onclick = function () { tab = b.dataset.tab; render(); }; });
     ({ qr: qrTab, drivers: driversTab, "new": newTab, team: teamTab, campaigns: campaignsTab })[tab]();

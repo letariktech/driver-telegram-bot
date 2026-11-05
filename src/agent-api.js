@@ -19,11 +19,17 @@ export async function botName(env, getBot) {
   return botUsername;
 }
 
-export function qrSvg(text) {
-  const q = qrcode(0, "M");
+/** QR በካቢ ምልክት መሃል ላይ — ደረጃ H (30% ቢሸፈንም ይነበባል)፤ ሎጎው ~16% ብቻ ይሸፍናል */
+export function qrSvg(text, { logo = true } = {}) {
+  const q = qrcode(0, logo ? "H" : "M");
   q.addData(text);
   q.make();
-  return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+  const n = q.getModuleCount(), m = 2, size = n + m * 2;
+  let d = "";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c + m} ${r + m}h1v1h-1z`;
+  const box = Math.round(n * 0.22), o = (size - box) / 2;
+  const mark = logo ? `<rect x="${o - 0.6}" y="${o - 0.6}" width="${box + 1.2}" height="${box + 1.2}" rx="${box * 0.22}" fill="#fff"/><image href="/assets/mark.png" x="${o + 0.4}" y="${o + 0.4}" width="${box - 0.8}" height="${box - 0.8}"/>` : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges" role="img" aria-label="QR"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#14112b"/>${mark}</svg>`;
 }
 
 const NEXT_STEP = {
