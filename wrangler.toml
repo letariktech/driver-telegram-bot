@@ -26,9 +26,9 @@ crons = ["0 6 * * *"]
 
 [vars]
 BRAND_NAME = "Cabby"
-SUPPORT_CONTACT = ""     "0910022051"
-DRIVER_APP_LINK = ""     "https://play.google.com/store/apps/details?id=com.car.poolsharedriver&pcampaignid=web_share"
-DRIVER_GROUP_LINK = ""   "https://t.me/cabbyshareET"
+SUPPORT_CONTACT = "0910022051"     
+DRIVER_APP_LINK = "https://play.google.com/store/apps/details?id=com.car.poolsharedriver&pcampaignid=web_share"     
+DRIVER_GROUP_LINK = "https://t.me/cabbyshareET"   
 
 # ሚስጥሮች (በ `npx wrangler secret put` ወይም በdashboard → Settings → Variables and Secrets)፦
 #   BOT_TOKEN       — ከ @BotFather
