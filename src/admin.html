@@ -268,6 +268,15 @@ tbody tr { cursor: pointer; } tbody tr:hover td { background: var(--panel-2); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .form-grid label, .fld { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
 .form-grid .full { grid-column: 1 / -1; }
+.docpol { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr)); gap: 8px 22px; }
+.dp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.dp-row > span { font-weight: 600; font-size: 14px; } .dp-row small { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; flex-shrink: 0; }
+.seg button { border: 0; background: var(--panel); padding: 5px 10px; font: inherit; font-size: 12.5px; color: var(--ink-2); cursor: pointer; border-left: 1px solid var(--line); }
+.seg button:first-child { border-left: 0; }
+.seg button.on { background: var(--blue-soft); color: var(--blue); font-weight: 700; }
+.seg button.on[data-v="off"] { background: var(--panel-2); color: var(--muted); }
+.seg button:disabled { cursor: default; opacity: .4; } .seg button.on:disabled { opacity: 1; }
 .form-grid label.switch { flex-direction: row; align-items: center; gap: 9px; font-weight: 500; }
 .form-grid input, .form-grid select, .fld input { font: inherit; font-weight: 400; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--panel); color: var(--ink); }
 .modal .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
@@ -340,7 +349,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     appt_reschedule: ["ሌላ ቀን ጠየቀ", "y"], passed: ["አለፈ", "g"], activated: ["ለስራ ዝግጁ ሆነ", "g"], suspended: ["ታገደ", "r"], unsuspended: ["እገዳ ተነሳ", "g"],
     note: ["ማስታወሻ", ""], fix_submitted: ["እገዳ ለማንሳት ማስተካከያ አቀረበ", "y"], fix_rejected: ["ማስተካከያው በቂ አልሆነም", "r"], settings_changed: ["ቅንብሮችን ቀየረ", "b"], message: ["መልዕክት ተላከ", "b"], referral_reward: ["የጥቆማ ሽልማት ማሳወቂያ", "g"], referral_paid: ["የጥቆማ ሽልማት ተከፈለ", "g"], admin_login: ["ወደ ዳሽቦርድ ገባ", ""],
     staff_saved: ["ሴልስ ተመዘገበ/ተቀየረ", "b"], staff_linked: ["ሴልስ Telegram አገናኘ", "g"], campaign_saved: ["ካምፔን ተቀመጠ", "b"], telegram_linked: ["Telegram አገናኘ", "g"],
-    commission_paid: ["የሴልስ ኮሚሽን ተከፈለ", "g"], agent_registered: ["በሴልስ ተመዘገበ", "b"],
+    commission_paid: ["የሴልስ ኮሚሽን ተከፈለ", "g"],
+    doc_added: ["የቀረ ሰነድ ላከ", "b"], docs_completed: ["ሰነዶቹን አሟልቷል", "g"], docs_overdue: ["የሰነድ ጊዜ አለፈ", "r"], docs_extended: ["የሰነድ ጊዜ ተራዘመ", "y"],
+    activated_override: ["ሰነድ ሳይሟላ ለስራ ዝግጁ ሆነ (በልዩ ሁኔታ)", "y"], agent_registered: ["በሴልስ ተመዘገበ", "b"],
   };
   function evDetail(e) {
     if (!e.detail) return "";
@@ -348,7 +359,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     if (e.type === "passed") return STAGE[e.detail] || e.detail;
     if (e.type === "scheduled") return e.detail.replace(/^(test|inspection|orientation): /, function (_, k) { return STAGE[k] + " · "; });
     if (e.type === "rejected" || e.type === "suspended") return M.labels.reasons[e.detail] || e.detail;
-    if (e.type === "doc_requested") return M.labels.docs[e.detail] || e.detail;
+    if (e.type === "doc_requested" || e.type === "doc_added") return M.labels.docs[e.detail] || e.detail;
     return e.detail;
   }
   function actorLabel(a) { return a === "driver" ? "አሽከርካሪው" : a === "system" ? "ሲስተም" : a; }
@@ -390,6 +401,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   function dcard(c) {
     var tags = [];
     if (c.green) tags.push('<span class="tag g">⚡ ቅድሚያ</span>');
+    if (c.docs_overdue) tags.push('<span class="tag r">⛔ የሰነድ ጊዜ አልፏል</span>');
+    else if (c.docs_due) tags.push('<span class="tag y">📎 ሰነድ ይጎድላል · ' + c.docs_left + " ቀን</span>");
     if (c.no_tg) tags.push('<span class="tag" title="Telegram የለውም — መልዕክቶች በSMS እና በሴልሱ በኩል">📵 SMS</span>');
     if (c.status === "pending" && c.next_stage) tags.push('<span class="tag">→ ' + h(STAGE[c.next_stage]) + "</span>");
     if (["test", "inspection", "orientation"].indexOf(c.status) >= 0) {
@@ -468,7 +481,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       sel("f-status", [["", "ሁሉም ሁኔታዎች"]].concat(M.statuses.map(function (s) { return [s, S(s)]; }))) +
       sel("f-service", [["", "ሁሉም አገልግሎቶች"], ["share", "Cabby Share"], ["reserve", "Cabby Reserve"]]) +
       sel("f-mode", [["", "መኪና፦ ሁሉም"], ["own", "የራሱ መኪና"], ["other", "የሌላ ሰው መኪና"], ["none", "መኪና የለውም"]]) +
-      sel("f-fuel", [["", "ነዳጅ፦ ሁሉም"], ["green", "⚡ ኤሌክትሪክ + ሃይብሪድ"], ["electric", "ኤሌክትሪክ"], ["hybrid", "ሃይብሪድ"], ["petrol", "ቤንዚን"], ["diesel", "ናፍጣ"]]) +
+      sel("f-fuel", [["", "የኃይል ምንጭ፦ ሁሉም"], ["green", "⚡ ኤሌክትሪክ + ሃይብሪድ"], ["electric", "ኤሌክትሪክ"], ["hybrid", "ሃይብሪድ"], ["petrol", "ቤንዚን"], ["diesel", "ናፍጣ"]]) +
       '<span id="f-sales"></span>' +
       sel("f-sort", [["recent", "በቅርብ የተቀየሩ"], ["oldest", "ረጅም የጠበቁ"], ["name", "በስም"], ["code", "በCB ኮድ"]]) +
       '<span class="count" id="f-count"></span></div><div id="tbl"><div class="empty">በመጫን ላይ…</div></div>';
@@ -587,7 +600,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         '<section class="panel" style="margin-bottom:14px"><div class="panel-head"><h3>ምዝገባ እና ለስራ ዝግጁ — ያለፉት 30 ቀናት</h3></div>' +
         '<div class="legend"><span><i style="background:var(--s1)"></i>አዲስ ምዝገባ</span><span><i style="background:var(--s2)"></i>ለስራ ዝግጁ የሆኑ</span></div><div class="chart" id="ch-line"></div></section>' +
         '<div class="grid2">' + barPanel("አገልግሎት", a.services.map(function (x) { return [list("services", x.k).replace("፣ ", " + "), x.n]; })) +
-        barPanel("ነዳጅ", a.fuel.map(function (x) { return [x.k === "none" ? "መኪና የለውም" : O("fuel", x.k), x.n]; })) +
+        barPanel("የኃይል ምንጭ", a.fuel.map(function (x) { return [x.k === "none" ? "መኪና የለውም" : O("fuel", x.k), x.n]; })) +
         barPanel("የመኪና ሁኔታ", a.mode.map(function (x) { return [O("mode", x.k), x.n]; })) +
         barPanel("ክፍለ ከተማ", a.subcity.map(function (x) { return [x.k, x.n]; })) + "</div>";
       lineChart($("#ch-line"), a.signups, a.activations, 30);
@@ -815,10 +828,17 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           tog("t-grades", S0.options.grades.map(function (g) { return [g, g]; }), R.accepted_grades) +
           '<h3 style="font-family:var(--display);font-size:16px;margin:18px 0 6px">የሚቀበሉ የሰሌዳ ኮዶች</h3><p class="hint">ምንም ካልመረጡ ሁሉም ኮዶች ይቀበላሉ።</p>' +
           tog("t-plates", plateCodes.map(function (c) { return [c, "ኮድ " + c]; }), R.allowed_plate_codes) +
-          '<h3 style="font-family:var(--display);font-size:16px;margin:18px 0 6px">⚡ ቅድሚያ የሚያገኙ ነዳጆች</h3>' +
+          '<h3 style="font-family:var(--display);font-size:16px;margin:18px 0 6px">⚡ ቅድሚያ የሚያገኙ የኃይል ምንጮች</h3>' +
           tog("t-fuels", S0.options.fuels.map(function (f) { return [f, O("fuel", f)]; }), R.green_fuels) + "</div></section>" +
-        '<section class="panel"><div class="panel-head"><h3>የሚጠየቁ ሰነዶች</h3></div><div class="body"><p class="hint">የበራው ይጠየቃል። መንጃ ፈቃድ፣ መታወቂያ እና የራስ ፎቶ ሁልጊዜ ይጠየቃሉ።</p>' +
-          tog("t-docs", S0.options.docs.map(function (d) { return [d.kind, d.label + docsWhen[d.when], d.core]; }), R.disabled_docs, { invert: true }) + "</div></section>" +
+        '<section class="panel wide"><div class="panel-head"><h3>የሚጠየቁ ሰነዶች</h3></div><div class="body"><p class="hint"><b>ግዴታ</b>፦ ሳይሞላ ማመልከቻው አይላክም። <b>በኋላ</b>፦ "አሁን የለኝም" ብሎ መላክ ይችላል፤ ግን ሳይሟላ ለስራ ዝግጁ አይሆንም። <b>አማራጭ</b>፦ ቢጎድልም ችግር የለውም። መንጃ ፈቃድ፣ መታወቂያ እና የራስ ፎቶ ሁልጊዜ ግዴታ ናቸው።</p>' +
+          '<div class="docpol">' + S0.options.docs.map(function (d) {
+            var cur = d.core ? "required" : R.disabled_docs.indexOf(d.kind) >= 0 ? "off" : (R.optional_docs || []).indexOf(d.kind) >= 0 ? "optional" : (R.later_docs || []).indexOf(d.kind) >= 0 ? "later" : "required";
+            return '<div class="dp-row"><span>' + h(d.label) + '<small>' + h(docsWhen[d.when]) + '</small></span><div class="seg" data-doc="' + d.kind + '">' +
+              [["required", "ግዴታ"], ["later", "በኋላ"], ["optional", "አማራጭ"], ["off", "አይጠየቅም"]].map(function (o) {
+                return '<button type="button" data-v="' + o[0] + '" class="' + (cur === o[0] ? "on" : "") + '"' + (d.core && o[0] !== "required" ? " disabled" : "") + ">" + o[1] + "</button>";
+              }).join("") + "</div></div>";
+          }).join("") + "</div>" +
+          '<div class="nums" style="margin-top:14px">' + num("doc_deadline_days", "የ\"በኋላ\" ሰነዶች የጊዜ ገደብ", "ቀን — ማስታወሻ በ3፣ 7 እና 12ኛ ቀን") + "</div></div></section>" +
         '<section class="panel"><div class="panel-head"><h3>ሊንኮች እና ድጋፍ</h3></div><div class="body"><p class="hint">አሽከርካሪው ሲጸድቅ የሚላኩ። ባዶ ከሆነ የwrangler.toml እሴት ይጠቀማል።</p><div class="links">' +
           Object.keys(LINK_LABELS).map(function (k) { return "<span>" + h(LINK_LABELS[k]) + '</span><input data-link="' + k + '" value="' + h(Lk[k] || "") + '" placeholder="' + h(S0.env_links[k] || (/_URL$|_LINK$/.test(k) ? "https://…" : "")) + '">'; }).join("") +
           "</div></div></section>" +
@@ -846,6 +866,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       }
       function num(k, label, small) { return '<label>' + h(label) + '<input type="number" data-num="' + k + '" value="' + h(R[k]) + '"><small>' + h(small) + "</small></label>"; }
       [].forEach.call(view.querySelectorAll(".toggles button"), function (b) { b.onclick = function () { if (!b.disabled) b.classList.toggle("on"); dirty(); }; });
+      [].forEach.call(view.querySelectorAll(".seg button"), function (b) { b.onclick = function () { if (b.disabled) return; [].forEach.call(b.parentNode.children, function (x) { x.classList.toggle("on", x === b); }); dirty(); }; });
       var ta = $("#ag-text"); ta.value = AGT.am || "";
       ta.oninput = function () { AGT[agLang] = ta.value; dirty(); };
       [].forEach.call(view.querySelectorAll("#ag-tabs [data-l]"), function (b) {
@@ -864,7 +885,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         var rules = {};
         [].forEach.call(view.querySelectorAll("[data-num]"), function (i) { rules[i.dataset.num] = Number(i.value); });
         rules.accepted_grades = picked("t-grades"); rules.allowed_plate_codes = picked("t-plates"); rules.green_fuels = picked("t-fuels");
-        rules.disabled_docs = picked("t-docs", true); rules.test_for_no_car = $("#r-test").checked; rules.require_orientation = $("#r-orient").checked;
+        var pol = function (v) { return [].filter.call(view.querySelectorAll(".seg[data-doc]"), function (s) { var on = s.querySelector(".on"); return on && on.dataset.v === v; }).map(function (s) { return s.dataset.doc; }); };
+        rules.disabled_docs = pol("off"); rules.later_docs = pol("later"); rules.optional_docs = pol("optional"); rules.test_for_no_car = $("#r-test").checked; rules.require_orientation = $("#r-orient").checked;
         var links = {}; [].forEach.call(view.querySelectorAll("[data-link]"), function (i) { links[i.dataset.link] = i.value.trim(); });
         var smsOn = picked("t-sms"), kinds = {}; S0.sms_kinds.forEach(function (k) { kinds[k] = smsOn.indexOf(k) >= 0; });
         var sms = { enabled: $("#sms-on").checked, token: $("#sms-token").value.trim(), sender: $("#sms-sender").value.trim(), identifier: $("#sms-ident").value.trim(), monthly_limit: Number($("#sms-limit").value), kinds: kinds };
@@ -909,6 +931,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       b.push(["form:schedule", d.appt_label ? "📅 ቀጠሮ ቀይር" : "📅 የስልጠና ቀጠሮ ስጥ", d.appt_label ? "" : "primary"], ["pass", "✅ ስልጠና ወስዷል — ለስራ ዝግጁ አድርግ", "go"], ["form:fail", "🚫 አልመጣም", "danger"]);
     } else if (d.status === "active") b.push(["form:suspend", "⛔ አግድ", "danger"]);
     else if (d.status === "suspended") { b.push(["unsuspend", "♻️ እገዳ አንሳ", "go"]); if (d.fix_state === "submitted") b.push(["form:reject_fix", "↩️ አልበቃም", "danger"]); }
+    if (d.docs_due && ["rejected", "awaiting_docs"].indexOf(d.status) < 0) b.push(["extend_docs", "⏳ የሰነድ ጊዜ +7 ቀን", d.docs_overdue ? "primary" : ""]);
     b.push(["form:message", "💬 መልዕክት ላክ"], ["form:note", "📝 ማስታወሻ"]);
     return b.map(function (x) { return '<button class="btn sm ' + (x[2] || "") + '" data-act="' + x[0] + '">' + h(x[1]) + "</button>"; }).join("");
   }
@@ -947,7 +970,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         if (a.indexOf("form:") === 0) { var f = $("#af-" + a.slice(5)); var on = !f.classList.contains("on"); [].forEach.call(dr.querySelectorAll(".actform"), function (x) { x.classList.remove("on"); }); f.classList.toggle("on", on); return; }
         var confirmText = { activate: "አሽከርካሪውን አሁን ለስራ ዝግጁ ማድረግ? (የቀሩት ደረጃዎች ይዘለላሉ)", pass: d.status === "orientation" ? "ስልጠና ወስዷል — ለስራ ዝግጁ ይሁን?" : null }[a];
         if (confirmText && !window.confirm(confirmText)) return;
-        act(a, {}, b);
+        act(a, a === "extend_docs" ? { days: 7 } : {}, b);
       };
     });
     [].forEach.call(dr.querySelectorAll("[data-do]"), function (b) {
@@ -986,7 +1009,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     ]) + (d.has_vehicle ? g("መኪና", [
       row("ሁኔታ", t(O("mode", d.vehicle_mode))), row("መኪና", t([d.vehicle_make !== "other" ? d.vehicle_make : "", d.vehicle_model].join(" "))),
       row("ዓመት", t(d.vehicle_year + (d.vehicle_age != null ? " (" + d.vehicle_age + " ዓመት" + (d.vehicle_age > M.rules.inspection_after ? " — ፍተሻ ያስፈልጋል" : "") + ")" : ""))),
-      row("ዓይነት / ቀለም", t(O("vtype", d.vehicle_type) + " · " + d.vehicle_color)), row("ነዳጅ", (d.green ? '<span class="tag g">' : "<span>") + t(O("fuel", d.fuel_type)) + "</span>"),
+      row("ዓይነት / ቀለም", t(O("vtype", d.vehicle_type) + " · " + d.vehicle_color)), row("የኃይል ምንጭ", (d.green ? '<span class="tag g">' : "<span>") + t(O("fuel", d.fuel_type)) + "</span>"),
       row("መቀመጫ / AC", t((d.vehicle_seats || "—") + " · " + (d.vehicle_ac ? "AC አለው" : "AC የለውም"))), row("ሰሌዳ", t(d.plate_region + " · ኮድ " + d.plate_code + " · " + d.plate_number)),
       d.vehicle_mode === "other" ? row("ባለቤት", t(d.owner_name + " · " + d.owner_phone)) : "",
     ]) : g("መኪና", [row("ሁኔታ", t(O("mode", "none")) + " → የቃል እና የተግባር ፈተና")])) + g("አገልግሎት", [
@@ -997,6 +1020,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       row("የጠቆመው", r.referrer ? '<a href="#" data-id="' + r.referrer.tg_id + '">' + t(r.referrer.full_name + " " + (r.referrer.code || "")) + "</a>" : d.referral ? t(d.referral + " (አልተገኘም)") : ""),
     ]) + g("መዝገብ", [
       row("ስምምነት", d.agreement_version ? t("v" + d.agreement_version + " · " + local(d.agreement_accepted_at)) : t("አልተቀበለም (የቀድሞ ምዝገባ)")),
+      d.docs_due ? row("ሰነድ ማሟያ", d.docs_overdue ? '<span class="tag r">⛔ ጊዜው አልፏል</span>' : '<span class="tag y">📎 ' + d.docs_left + " ቀን ቀርቷል</span>") : "",
       row("የተመዘገበው", t(local(d.created_at))), row("ሰነድ ያቀረበው", t(local(d.submitted_at))), row("ለስራ ዝግጁ የሆነው", t(local(d.activated_at))), row("የመጨረሻ ውሳኔ", t(d.reviewed_by)), d.no_tg ? row("Telegram", '<span class="tag">📵 የለውም — መልዕክቶች በSMS እና ለሴልሱ ይሄዳሉ</span>') : row("Telegram ID", t(d.tg_id) + (d.telegram_linked_at ? " · በኋላ ያገናኘ " + t(local(d.telegram_linked_at)) : "")),
     ]);
   }
@@ -1005,7 +1029,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     var have = {}; docs.forEach(function (x) { have[x.kind] = x; });
     body.innerHTML = '<div class="docs">' + d.required_docs.map(function (k) {
       var x = have[k];
-      if (!x) return '<div class="doc missing"><div class="img">አልተላከም</div><div class="cap">' + h(M.labels.docs[k]) + "</div></div>";
+      var pol = (d.doc_policy || {})[k];
+      if (!x) return '<div class="doc missing"><div class="img">' + (pol === "later" ? (d.status === "awaiting_docs" ? "አልተላከም" : "📎 በኋላ ያሟላል") : pol === "optional" ? "የለውም (አማራጭ)" : "አልተላከም") + '</div><div class="cap">' + h(M.labels.docs[k]) + "</div></div>";
       var src = "/api/admin/file/" + encodeURIComponent(x.file_id);
       return '<button class="doc" data-src="' + h(src) + '" data-type="' + x.file_type + '" data-cap="' + h(M.labels.docs[k]) + '"><div class="img" data-bg="' + h(src) + '">' + (x.file_type === "photo" ? "" : "📄 PDF") + '</div><div class="cap"><span>' + h(M.labels.docs[k]) + '</span><span style="color:var(--muted);font-weight:400">' + h(ago(x.created_at)) + "</span></div></button>";
     }).join("") + "</div>" + (INIT ? "" : '<p style="color:var(--muted);font-size:12.5px;margin-top:14px">ሰነዶቹ በቀጥታ ከTelegram ይጫናሉ።</p>');
@@ -1029,6 +1054,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     if (btn) btn.disabled = true;
     api("driver/" + current.driver.tg_id + "/" + a, { method: "POST", body: body }).then(function (res) {
       if (btn) btn.disabled = false;
+      if (!res.ok && res.code === "missing_docs" && !body.force) {
+        var why = window.prompt("📎 " + res.error + "\n\nበልዩ ሁኔታ ለስራ ዝግጁ ለማድረግ ምክንያቱን ይጻፉ (በመዝገብ ይቀመጣል)፦");
+        if (why && why.trim()) { a = "activate"; return act("activate", { force: true, reason: why.trim() }, btn); }
+        return toast("አልተቀየረም — ሰነዱ እስኪሟላ ይጠብቃል", 1);
+      }
       if (!res.ok) return toast(res.error || "አልተሳካም", 1);
       toast(res.warning ? "⚠️ " + res.warning : "✓ ተከናውኗል", !!res.warning);
       var id = current.driver.tg_id;

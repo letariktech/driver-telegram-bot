@@ -21,6 +21,7 @@ const COLUMNS = {
   fix_state: "TEXT", fix_docs: "TEXT", fix_note: "TEXT", fix_submitted_at: "TEXT", appeal_text: "TEXT",
   agent_id: "INTEGER", campaign_id: "INTEGER", commission_amount: "INTEGER", commission_paid_at: "TEXT",
   telegram_linked_at: "TEXT", appt_reminded_at: "TEXT",
+  docs_skipped: "TEXT", docs_since: "TEXT", docs_due_at: "TEXT", docs_reminders: "INTEGER DEFAULT 0", docs_overdue_at: "TEXT",
   reminder_count: "INTEGER DEFAULT 0", last_reminded_at: "TEXT",
   // የቀድሞ ስሪት (v2) አምዶች — ለማሻሻያ ብቻ
   test_at: "TEXT", test_confirmed: "INTEGER DEFAULT 0",
@@ -219,7 +220,25 @@ export async function getDocs(db, id) {
   const { results } = await db.prepare("SELECT * FROM documents WHERE tg_id = ?").bind(id).all();
   return results;
 }
-export const clearDocs = (db, id) => db.prepare("DELETE FROM documents WHERE tg_id = ?").bind(id).run();
+export const clearDocs = (db, id) => db.batch([
+  db.prepare("DELETE FROM documents WHERE tg_id = ?").bind(id),
+  db.prepare("UPDATE drivers SET docs_skipped = NULL, docs_since = NULL, docs_due_at = NULL, docs_reminders = 0, docs_overdue_at = NULL WHERE tg_id = ?").bind(id),
+]);
+/** ያለውን ሰነድ ይተካል (በቅጹ ውስጥ ሲቀየር) */
+export const replaceDoc = (db, id, kind, fileId, fileType) =>
+  db.prepare("INSERT INTO documents (tg_id, kind, file_id, file_type) VALUES (?, ?, ?, ?) ON CONFLICT(tg_id, kind) DO UPDATE SET file_id = excluded.file_id, file_type = excluded.file_type, created_at = datetime('now')")
+    .bind(id, kind, fileId, fileType).run();
+export async function setSkipped(db, id, kind, on) {
+  const d = await db.prepare("SELECT docs_skipped FROM drivers WHERE tg_id = ?").bind(id).first();
+  const s = new Set((d?.docs_skipped ?? "").split(",").filter(Boolean));
+  on ? s.add(kind) : s.delete(kind);
+  await db.prepare("UPDATE drivers SET docs_skipped = ? WHERE tg_id = ?").bind([...s].join(",") || null, id).run();
+}
+/** በኋላ የሚሟሉ ሰነዶች ያሏቸው (ለማስታወሻ) */
+export async function docsDue(db, limit) {
+  const { results } = await db.prepare(`SELECT * FROM drivers WHERE docs_due_at IS NOT NULL AND status IN ('pending','test','inspection','orientation','active') LIMIT ?`).bind(limit).all();
+  return results;
+}
 export const deleteDoc = (db, id, kind) => db.prepare("DELETE FROM documents WHERE tg_id = ? AND kind = ?").bind(id, kind).run();
 export const docByFileId = (db, fileId) => db.prepare("SELECT * FROM documents WHERE file_id = ?").bind(fileId).first();
 

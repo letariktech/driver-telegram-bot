@@ -176,6 +176,7 @@ export async function handleApi(request, env, path, getBot) {
   if (formLang && formLang !== prefs?.lang) await db.setLang(env.DB, user.id, formLang);
   await db.logEvent(env.DB, user.id, "driver", existing ? "form_updated" : "registered", existing?.status === "rejected" ? "ዳግም ማመልከቻ" : null);
 
-  try { await askNextDocument(getBot(env).api, env, user.id, true); } catch (e) { console.error("askNextDocument failed", e); }
-  return json({ ok: true });
+  // አዲሱ ቅጽ ሰነዶቹን እዚያው ይቀበላል፤ የቆየ ቅጽ ከሆነ ቦቱ በቻት ይጠይቃል
+  if (!body?.inapp) { try { await askNextDocument(getBot(env).api, env, user.id, true); } catch (e) { console.error("askNextDocument failed", e); } }
+  return json({ ok: true, id: user.id });
 }

@@ -70,6 +70,9 @@ function view(d) {
     appt_label: A.apptText(d, "am") || null,
     waiting_days: Math.max(0, Math.floor((Date.now() - Date.parse(`${d.updated_at}Z`)) / 86400000)),
     required_docs: C.requiredDocs(d).map((x) => x.kind),
+    doc_policy: Object.fromEntries(C.requiredDocs(d).map((x) => [x.kind, C.docPolicy(x.kind)])),
+    docs_skipped: d.docs_skipped ? d.docs_skipped.split(",") : [],
+    docs_due: !!d.docs_due_at, docs_left: A.daysLeft(d), docs_overdue: !!d.docs_overdue_at,
     no_tg: db.isNoTg(d.tg_id),
   };
 }
@@ -81,6 +84,7 @@ const card = (d) => {
     vehicle_mode: v.vehicle_mode, vehicle: v.has_vehicle ? [v.vehicle_make !== "other" ? v.vehicle_make : "", v.vehicle_model, v.vehicle_year].filter(Boolean).join(" ") : null,
     services: v.services, appt_label: v.appt_label, appt_at: v.appt_at, appt_confirmed: v.appt_confirmed, waiting_days: v.waiting_days,
     updated_at: v.updated_at, next_stage: v.next_stage, sub_city: v.sub_city, no_tg: v.no_tg, agent_id: v.agent_id,
+    docs_due: v.docs_due, docs_left: v.docs_left, docs_overdue: v.docs_overdue,
   };
 };
 
@@ -119,7 +123,8 @@ const ACTIONS = {
   schedule: (env, api, id, who, b) => A.schedule(env, api, id, who, { at: b.at, text: b.text }),
   pass: (env, api, id, who) => A.pass(env, api, id, who),
   fail: (env, api, id, who, b) => A.fail(env, api, id, who, b.reason),
-  activate: (env, api, id, who) => A.activate(env, api, id, who, "በዳሽቦርድ"),
+  activate: (env, api, id, who, b) => A.activate(env, api, id, who, "በዳሽቦርድ", { force: b.force === true, reason: b.reason }),
+  extend_docs: (env, api, id, who, b) => A.extendDocs(env, api, id, who, b.days),
   suspend: (env, api, id, who, b) => A.suspend(env, api, id, who, b.reason, { docs: b.docs, note: b.note }),
   reject_fix: (env, api, id, who, b) => A.rejectFix(env, api, id, who, b.note),
   unsuspend: (env, api, id, who) => A.unsuspend(env, api, id, who),
@@ -214,6 +219,7 @@ export async function handleAdminApi(request, env, path, getBot) {
           options: {
             grades: C.LICENSE_GRADES, fuels: C.FUEL_TYPES, langs: C.LANGS,
             docs: C.DOCUMENTS.map((d) => ({ kind: d.kind, label: t("am", `docs.${d.kind}`)[0], core: C.CORE_DOCS.includes(d.kind), when: d.when ? (d.kind === "authorization" ? "other" : "car") : "all" })),
+            doc_deadline_default: 14,
           },
         });
       }

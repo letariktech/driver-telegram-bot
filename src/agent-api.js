@@ -41,6 +41,7 @@ const driverRow = (d) => ({
   tg_id: d.tg_id, full_name: d.full_name, phone: d.phone, status: d.status, status_label: t("am", `status.${d.status}`),
   next: NEXT_STEP[d.status] ?? "", no_tg: db.isNoTg(d.tg_id), code: A.driverCode(d), campaign_id: d.campaign_id,
   appt: A.apptText(d, "am") || null, reason: d.reject_reason ? (C.REJECT_REASONS.includes(d.reject_reason) ? t("am", `reasons.${d.reject_reason}`, { brand: A.brand({}) }) : d.reject_reason) : null,
+  docs_due: !!d.docs_due_at, docs_left: A.daysLeft(d), docs_overdue: !!d.docs_overdue_at,
   commission: d.commission_amount, commission_paid: !!d.commission_paid_at, updated_at: d.updated_at, created_at: d.created_at,
 });
 
@@ -125,7 +126,7 @@ export async function handleAgentApi(request, env, path, getBot) {
     await db.setDriverFields(env.DB, id, { agent_id: st.id, campaign_id: campaignId });
     await db.setAgreement(env.DB, id, settings.agreement.version ?? 1);
     await db.logEvent(env.DB, id, actor, "registered", "በሴልስ — Telegram የለውም");
-    await A.askNextDocument(getBot(env).api, env, id, true);
+    if (!body.inapp) await A.askNextDocument(getBot(env).api, env, id, true);
     return json({ ok: true, id });
   }
 

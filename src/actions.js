@@ -117,6 +117,10 @@ export function reviewCard(d, note = "") {
     if (d.fix_note) extra.push(`   ማስታወሻ፦ ${esc(d.fix_note)}`);
     if (d.appeal_text) extra.push(`   ✍️ የአሽከርካሪው ማብራሪያ፦ <i>${esc(d.appeal_text)}</i>`);
   }
+  if (d.docs_due_at && d.status !== "rejected") {
+    const left = daysLeft(d);
+    extra.push(d.docs_overdue_at ? `⛔ <b>የሰነድ ጊዜ አልፏል</b> — ያራዝሙ ወይም ውድቅ ያድርጉ` : `📎 <b>በኋላ የሚያሟላ ሰነድ አለ</b> · ${left} ቀን ቀርቷል`);
+  }
   if (d.reviewed_by) extra.push(`👮 <b>የመጨረሻ ውሳኔ፦</b> ${esc(d.reviewed_by)}`);
   if (d.agreement_version) extra.push(`📄 ውል v${d.agreement_version} ተቀብሏል`);
   return (
@@ -144,10 +148,12 @@ export function cardKeyboard(d) {
       .text("✅ ስልጠና ወስዷል — ለስራ ዝግጁ አድርግ", `pass:${id}`).text("🚫 አልመጣም", `fail:${id}`);
   } else if (d.status === "active") {
     kb.text("⛔ አግድ", `sus:${id}`);
+    if (d.docs_overdue_at) kb.row().text("⏳ የሰነድ ጊዜ +7 ቀን", `ext:${id}`);
   } else if (d.status === "suspended") {
     kb.text("♻️ እገዳ አንሳ", `uns:${id}`);
     if (d.fix_state === "submitted") kb.text("↩️ አልበቃም", `fixno:${id}`);
   } else return undefined;
+  if (d.docs_overdue_at && d.status !== "active") kb.row().text("⏳ የሰነድ ጊዜ +7 ቀን", `ext:${id}`);
   return kb;
 }
 
@@ -191,35 +197,99 @@ async function deliverApplication(api, env, d, docs, header = null) {
 
 // ---------- የሰነድ አሰባሰብ ----------
 
+export async function docInfo(env, d) {
+  const have = new Set((await db.getDocs(env.DB, d.tg_id)).map((x) => x.kind));
+  return { have, ...C.docState(d, have) };
+}
+const docLabels = (lang, kinds) => kinds.map((k) => t(lang, `docs.${k}`)?.[0] ?? k).join("፣ ");
+const daysLeft = (d) => (d.docs_due_at ? Math.ceil((Date.parse(d.docs_due_at.replace(" ", "T") + "Z") - Date.now()) / 86400e3) : null);
+export { daysLeft, docLabels };
+
 export async function askNextDocument(api, env, id, intro = false) {
   const d = await db.getDriver(env.DB, id);
   if (!d || d.status !== "awaiting_docs") return;
   const lang = langOf(d);
-  const have = new Set((await db.getDocs(env.DB, id)).map((x) => x.kind));
-  const needed = C.requiredDocs(d);
-  const next = needed.find((x) => !have.has(x.kind));
+  const info = await docInfo(env, d);
+  const needed = info.list;
+  const next = info.next;
   if (!next) return submitForReview(api, env, d);
+  const skippable = C.docPolicy(next.kind) !== "required";
   if (db.isNoTg(id)) {
     // ሰነዶቹን ሴልሱ በራሱ ቻት ይልካል
     const agent = d.agent_id ? await db.staffById(env.DB, d.agent_id) : null;
     if (!agent?.tg_id) return;
     await env.DB.prepare("UPDATE staff SET collecting_for = ? WHERE id = ?").bind(id, agent.id).run();
     await api.sendMessage(agent.tg_id,
-      `👤 <b>${esc(d.full_name)}</b> · ${esc(d.phone)}\n📎 <b>ሰነድ ${needed.indexOf(next) + 1}/${needed.length}፦</b> ${t("am", `docs.${next.kind}`)[1]}\n\n<i>የአሽከርካሪውን ሰነድ ፎቶ አንስተው እዚሁ ይላኩ።</i>`, HTML);
+      `👤 <b>${esc(d.full_name)}</b> · ${esc(d.phone)}\n📎 <b>ሰነድ ${needed.indexOf(next) + 1}/${needed.length}፦</b> ${t("am", `docs.${next.kind}`)[1]}\n\n<i>የአሽከርካሪውን ሰነድ ፎቶ አንስተው እዚሁ ይላኩ።</i>`,
+      { ...HTML, reply_markup: skippable ? new InlineKeyboard().text(C.docPolicy(next.kind) === "optional" ? "⏭ የለውም" : "⏭ አሁን የለውም — በኋላ ያሟላል", `agskip:${id}:${next.kind}`) : undefined });
     return;
   }
   const head = intro ? `${T(env, lang, "form_received", { n: needed.length })}\n\n` : "";
-  await api.sendMessage(id, head + T(env, lang, "doc_step", { i: needed.indexOf(next) + 1, n: needed.length, prompt: t(lang, `docs.${next.kind}`)[1] }), {
-    ...HTML, reply_markup: new InlineKeyboard().text(T(env, lang, "btn_redo"), "redo"),
+  const kb = new InlineKeyboard();
+  if (skippable) kb.text(T(env, lang, C.docPolicy(next.kind) === "optional" ? "btn_skip_optional" : "btn_skip_later"), `skip:${next.kind}`).row();
+  kb.text(T(env, lang, "btn_redo"), "redo");
+  await api.sendMessage(id, head + T(env, lang, "doc_step", { i: needed.indexOf(next) + 1, n: needed.length, prompt: t(lang, `docs.${next.kind}`)[1] }) +
+    (skippable ? `\n\n<i>${T(env, lang, C.docPolicy(next.kind) === "optional" ? "doc_optional_note" : "doc_later_note", { days: C.DOC_DEADLINE_DAYS })}</i>` : ""), { ...HTML, reply_markup: kb });
+}
+
+/** "የለኝም" — ሰነዱን ዘሎ ቀጣዩን ይጠይቃል (ግዴታ ሰነድ አይዘለልም) */
+export async function skipDoc(api, env, id, kind, on = true) {
+  const d = await db.getDriver(env.DB, id);
+  if (!d) return { ok: false, error: "not found" };
+  if (C.docPolicy(kind) === "required" || !C.requiredDocs(d).some((x) => x.kind === kind)) return { ok: false, error: "required" };
+  await db.setSkipped(env.DB, id, kind, on);
+  return { ok: true };
+}
+
+/** ማመልከቻው ከተላከ በኋላ ሰነድ ሲጨመር — ሁሉም ከተሟላ የጊዜ ገደቡ ይነሳል */
+export async function docAdded(api, env, id, kind, by = "driver") {
+  const d = await db.getDriver(env.DB, id);
+  if (!d || d.status === "awaiting_docs") return;
+  await db.setSkipped(env.DB, id, kind, false);
+  await db.logEvent(env.DB, id, by, "doc_added", kind);
+  const info = await docInfo(env, await db.getDriver(env.DB, id));
+  if (d.docs_due_at && !info.missingLater.length) {
+    await env.DB.prepare("UPDATE drivers SET docs_due_at = NULL, docs_overdue_at = NULL WHERE tg_id = ?").bind(id).run();
+    await db.logEvent(env.DB, id, "system", "docs_completed");
+    await tell(env, api, d, { text: (l) => T(env, l, "docs_complete") });
+    await notifyAdmins(api, env, `📎 <b>${esc(d.full_name)}</b> ${driverCode(d) ? `(${driverCode(d)}) ` : ""}የቀሩትን ሰነዶች አሟልቷል።`,
+      { reply_markup: new InlineKeyboard().url("📊 ዳሽቦርድ", `${dashboardUrl(env)}#drivers/${id}`) });
+  }
+  return info;
+}
+
+/** የጊዜ ገደቡ ያለፈበት ማመልከቻ ይቆማል */
+const overdue = (d) => (d?.docs_overdue_at ? { ok: false, code: "overdue", error: "የሰነድ ማሟያ ጊዜው አልፏል — መጀመሪያ ጊዜውን ያራዝሙ ወይም ውድቅ ያድርጉ።" } : null);
+
+export async function extendDocs(env, api, id, actor, days = 7) {
+  days = Math.max(1, Math.min(60, parseInt(days, 10) || 7));
+  const d = await db.getDriver(env.DB, id);
+  if (!d?.docs_due_at) return { ok: false, error: "ይህ አሽከርካሪ የሚያሟላው ሰነድ የለም።" };
+  const base = Math.max(Date.now(), Date.parse(d.docs_due_at.replace(" ", "T") + "Z"));
+  const due = new Date(base + days * 86400e3).toISOString().slice(0, 19).replace("T", " ");
+  await env.DB.prepare("UPDATE drivers SET docs_due_at = ?, docs_overdue_at = NULL WHERE tg_id = ?").bind(due, id).run();
+  await db.logEvent(env.DB, id, actor, "docs_extended", `+${days} ቀን`);
+  const fresh = await db.getDriver(env.DB, id);
+  const info = await docInfo(env, fresh);
+  await tell(env, api, fresh, {
+    text: (l) => T(env, l, "docs_extended", { days: daysLeft(fresh), list: esc(docLabels(l, info.missingLater)) }),
+    sms: ["docs_reminder", (l) => ({ n: info.missingLater.length, list: docLabels(l, info.missingLater), days: daysLeft(fresh) })],
   });
+  return { ok: true, driver: fresh };
 }
 
 async function submitForReview(api, env, d) {
   if (!(await db.transition(env.DB, d.tg_id, "pending", { from: "awaiting_docs" }))) return;
-  await db.logEvent(env.DB, d.tg_id, "driver", "submitted");
+  const info = await docInfo(env, d);
+  if (info.missingLater.length) {
+    const due = new Date(Date.now() + C.DOC_DEADLINE_DAYS * 86400e3).toISOString().slice(0, 19).replace("T", " ");
+    await env.DB.prepare("UPDATE drivers SET docs_since = datetime('now'), docs_due_at = ?, docs_reminders = 0, docs_overdue_at = NULL WHERE tg_id = ?").bind(due, d.tg_id).run();
+  }
+  await db.logEvent(env.DB, d.tg_id, "driver", "submitted", info.missingLater.length ? `በኋላ የሚያሟላ፦ ${docLabels("am", info.missingLater)}` : null);
   const fresh = await db.getDriver(env.DB, d.tg_id);
   if (db.isNoTg(d.tg_id) && d.agent_id) await env.DB.prepare("UPDATE staff SET collecting_for = NULL WHERE id = ? AND collecting_for = ?").bind(d.agent_id, d.tg_id).run();
-  const msg = (lang) => T(env, lang, "submitted") + (C.isGreen(d) ? `\n\n${T(env, lang, "green_note", { fuel: opt(lang, "fuel", d.fuel_type) })}` : "");
+  const msg = (lang) => T(env, lang, "submitted") + (C.isGreen(d) ? `\n\n${T(env, lang, "green_note", { fuel: opt(lang, "fuel", d.fuel_type) })}` : "") +
+    (info.missingLater.length ? `\n\n${T(env, lang, "submitted_missing", { list: esc(docLabels(lang, info.missingLater)), days: C.DOC_DEADLINE_DAYS })}` : "");
   await tell(env, api, d, { text: msg, sms: ["submitted"] });
   await deliverApplication(api, env, fresh, await db.getDocs(env.DB, d.tg_id));
 }
@@ -250,6 +320,7 @@ const stageName = (env, lang, s) => t(lang, `tl_${s}`);
 export async function approveDocs(env, api, id, actor) {
   const d = await db.getDriver(env.DB, id);
   if (d?.status !== "pending") return stale;
+  if (overdue(d)) return overdue(d);
   const stage = C.stageAfterDocs(d, year());
   if (stage === "active") return activate(env, api, id, actor, "ሰነዶች ጸድቀዋል");
   if (!(await db.transition(env.DB, id, stage, { from: "pending", by: actor, appt: null }))) return stale;
@@ -307,6 +378,7 @@ export async function schedule(env, api, id, actor, { at = null, text = null } =
 export async function pass(env, api, id, actor) {
   const d = await db.getDriver(env.DB, id);
   if (!d || !C.APPOINTMENT_STAGES.includes(d.status)) return stale;
+  if (overdue(d)) return overdue(d);
   if (d.status === "orientation" || C.stageAfterPass() === "active") return activate(env, api, id, actor, d.status === "orientation" ? "ስልጠና ወስዷል" : `${d.status} አለፈ`);
   if (!(await db.transition(env.DB, id, "orientation", { from: d.status, by: actor, appt: null }))) return stale;
   await db.logEvent(env.DB, id, actor, "passed", d.status);
@@ -342,8 +414,20 @@ export function appButtons(env, d, lang) {
   return kb.inline_keyboard.flat().length ? kb : undefined;
 }
 
-export async function activate(env, api, id, actor, how = "") {
+export async function activate(env, api, id, actor, how = "", { force = false, reason = "" } = {}) {
   const before = await db.getDriver(env.DB, id);
+  if (!before) return stale;
+  const info = await docInfo(env, before);
+  if (info.missingRequired.length && ["pending", "test", "inspection", "orientation"].includes(before.status)) {
+    return { ok: false, code: "missing_required", error: `ግዴታ ሰነድ ይጎድላል፦ ${docLabels("am", info.missingRequired)}` };
+  }
+  if (info.missingLater.length && !force) {
+    return { ok: false, code: "missing_docs", missing: info.missingLater, error: `ሰነድ ይጎድላል፦ ${docLabels("am", info.missingLater)}። ሳይሟላ ለስራ ዝግጁ ማድረግ የሚቻለው በዳሽቦርድ በልዩ ሁኔታ (ምክንያት በመጻፍ) ብቻ ነው።` };
+  }
+  if (force && info.missingLater.length) {
+    reason = String(reason ?? "").trim().slice(0, 300);
+    if (reason.length < 3) return { ok: false, code: "reason", error: "በልዩ ሁኔታ ለማድረግ ምክንያት ይጻፉ።" };
+  }
   if (!(await db.transition(env.DB, id, "active", { from: ["pending", "test", "inspection", "orientation"], by: actor, appt: null }))) return stale;
   let d = await db.getDriver(env.DB, id);
   // የሴልስ ኮሚሽን — የካምፔኑ መጠን፣ ከሌለ የመነሻው። ለስራ ዝግጁ በሆነበት ቀን ያለው መጠን ይመዘገባል።
@@ -354,6 +438,7 @@ export async function activate(env, api, id, actor, how = "") {
     d = await db.getDriver(env.DB, id);
   }
   await db.logEvent(env.DB, id, actor, "activated", how || (before.status === "pending" ? "በቀጥታ" : before.status));
+  if (force && info.missingLater.length) await db.logEvent(env.DB, id, actor, "activated_override", `${docLabels("am", info.missingLater)} — ${reason}`);
   const lang = langOf(d);
   const code = driverCode(d);
   const firstApp = appButtons(env, d, lang)?.inline_keyboard.flat().find((b) => b.url)?.url;

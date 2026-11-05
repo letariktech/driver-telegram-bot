@@ -121,7 +121,11 @@ export function validateSettings(input) {
     o.accepted_grades = subset(r.accepted_grades, C.LICENSE_GRADES); if (!o.accepted_grades?.length) errors.push("ቢያንስ አንድ የመንጃ ፈቃድ ደረጃ ይምረጡ።");
     o.allowed_plate_codes = (Array.isArray(r.allowed_plate_codes) ? r.allowed_plate_codes : []).map(String).filter((x) => /^\d{1,2}$/.test(x));
     o.green_fuels = subset(r.green_fuels, C.FUEL_TYPES) ?? [];
-    o.disabled_docs = (subset(r.disabled_docs, C.DOCUMENTS.map((d) => d.kind)) ?? []).filter((k) => !C.CORE_DOCS.includes(k));
+    const kinds = C.DOCUMENTS.map((d) => d.kind);
+    o.disabled_docs = (subset(r.disabled_docs, kinds) ?? []).filter((k) => !C.CORE_DOCS.includes(k));
+    o.later_docs = (subset(r.later_docs ?? C.RULE_DEFAULTS.later_docs, kinds) ?? []).filter((k) => !C.CORE_DOCS.includes(k) && !o.disabled_docs.includes(k));
+    o.optional_docs = (subset(r.optional_docs ?? [], kinds) ?? []).filter((k) => !C.CORE_DOCS.includes(k) && !o.disabled_docs.includes(k) && !o.later_docs.includes(k));
+    o.doc_deadline_days = int(r.doc_deadline_days ?? 14, 1, 90); if (o.doc_deadline_days == null) errors.push("የሰነድ ጊዜ ገደብ ከ1 እስከ 90 ቀን መሆን አለበት።");
     o.test_for_no_car = r.test_for_no_car !== false;
     o.require_orientation = r.require_orientation !== false;
     o.agent_commission = int(r.agent_commission ?? 0, 0, 1000000); if (o.agent_commission == null) errors.push("የሴልስ ኮሚሽን ትክክለኛ ቁጥር (ብር) መሆን አለበት።");

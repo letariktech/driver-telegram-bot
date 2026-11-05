@@ -11,11 +11,14 @@ export const RULE_DEFAULTS = {
   allowed_plate_codes: [],      // ባዶ = ሁሉም ይቀበላሉ፤ ለምሳሌ ["1", "3"]
   green_fuels: ["hybrid", "electric"],
   disabled_docs: [],            // የማይጠየቁ ሰነዶች
+  later_docs: ["police", "tin"], // "አሁን የለኝም" ብሎ ማመልከቻውን መላክ የሚቻልባቸው — ሳይሟሉ ግን ለስራ ዝግጁ አይሆንም
+  optional_docs: [],            // ቢጎድሉም ችግር የሌለባቸው
+  doc_deadline_days: 14,        // በኋላ የሚሟሉ ሰነዶች የጊዜ ገደብ (ቀን)
   test_for_no_car: true,        // መኪና የሌላቸው የቃል እና የተግባር ፈተና
   require_orientation: true,    // ለስራ ዝግጁ ከማድረግ በፊት ስልጠና
   agent_commission: 0,          // ለሴልስ የመነሻ ኮሚሽን (ብር) — ካምፔኑ የራሱ ከሌለው
 };
-export const SMS_KINDS = ["submitted", "docs_approved", "doc_rerequest", "appt", "passed", "activated", "rejected", "suspended", "unsuspended", "license_expiry", "appt_reminder", "otp"];
+export const SMS_KINDS = ["submitted", "docs_approved", "doc_rerequest", "appt", "passed", "activated", "rejected", "suspended", "unsuspended", "license_expiry", "appt_reminder", "otp", "docs_reminder"];
 export const SMS_DEFAULTS = { enabled: false, token: "", sender: "", identifier: "", monthly_limit: 2000, kinds: Object.fromEntries(SMS_KINDS.map((k) => [k, true])) };
 export const LINK_KEYS = ["SHARE_ANDROID_URL", "SHARE_IOS_URL", "RESERVE_ANDROID_URL", "RESERVE_IOS_URL", "DRIVER_GROUP_LINK", "SUPPORT_CONTACT", "REFERRAL_REWARD"];
 
@@ -28,6 +31,9 @@ export let ACCEPTED_GRADES = RULE_DEFAULTS.accepted_grades;
 export let ALLOWED_PLATE_CODES = null;
 export let GREEN_FUELS = RULE_DEFAULTS.green_fuels;
 export let DISABLED_DOCS = [];
+export let LATER_DOCS = RULE_DEFAULTS.later_docs;
+export let OPTIONAL_DOCS = [];
+export let DOC_DEADLINE_DAYS = 14;
 export let TEST_FOR_NO_CAR = true;
 export let REQUIRE_ORIENTATION = true;
 export let LINKS = {};
@@ -38,7 +44,7 @@ export function applySettings({ rules = {}, links = {}, version = 0 } = {}) {
   const r = { ...RULE_DEFAULTS, ...rules };
   MIN_AGE = r.min_age; MAX_AGE = r.max_age; MAX_VEHICLE_AGE = r.max_vehicle_age; INSPECTION_AFTER_YEARS = r.inspection_after_years;
   ACCEPTED_GRADES = r.accepted_grades; ALLOWED_PLATE_CODES = r.allowed_plate_codes?.length ? r.allowed_plate_codes : null;
-  GREEN_FUELS = r.green_fuels; DISABLED_DOCS = r.disabled_docs ?? []; TEST_FOR_NO_CAR = r.test_for_no_car !== false; REQUIRE_ORIENTATION = r.require_orientation !== false;
+  GREEN_FUELS = r.green_fuels; DISABLED_DOCS = r.disabled_docs ?? []; LATER_DOCS = r.later_docs ?? []; OPTIONAL_DOCS = r.optional_docs ?? []; DOC_DEADLINE_DAYS = Number(r.doc_deadline_days) || 14; TEST_FOR_NO_CAR = r.test_for_no_car !== false; REQUIRE_ORIENTATION = r.require_orientation !== false;
   LINKS = links ?? {};
   AGENT_COMMISSION = Number(r.agent_commission) || 0;
   SETTINGS_VERSION = version;
@@ -97,6 +103,25 @@ export const DOCUMENTS = [
 ];
 export const CORE_DOCS = ["license", "id", "selfie"]; // ሁልጊዜ የሚጠየቁ
 export const requiredDocs = (d) => DOCUMENTS.filter((x) => (!x.when || x.when(d)) && !DISABLED_DOCS.includes(x.kind));
+/** "required" | "later" | "optional" */
+export const docPolicy = (kind) => (CORE_DOCS.includes(kind) ? "required" : OPTIONAL_DOCS.includes(kind) ? "optional" : LATER_DOCS.includes(kind) ? "later" : "required");
+const csv = (v) => (v ? String(v).split(",").filter(Boolean) : []);
+/**
+ * የሰነድ ሁኔታ፦ የሚጠየቁት፣ ቀጣዩ፣ የጎደሉት።
+ * have፦ Set(kind)። d.docs_skipped፦ "የለኝም" የተባሉት።
+ */
+export function docState(d, have) {
+  const list = requiredDocs(d);
+  const skipped = new Set(csv(d.docs_skipped));
+  const missing = (p) => list.filter((x) => docPolicy(x.kind) === p && !have.has(x.kind)).map((x) => x.kind);
+  return {
+    list, skipped,
+    next: list.find((x) => !have.has(x.kind) && !(skipped.has(x.kind) && docPolicy(x.kind) !== "required")) ?? null,
+    missingRequired: missing("required"),
+    missingLater: missing("later"),      // ለስራ ዝግጁ ከመሆን የሚያግዱ
+    missingOptional: missing("optional"),
+  };
+}
 
 export const REJECT_REASONS = ["blurry", "expired", "mismatch", "vehicle", "experience", "test_oral", "test_practical", "inspection", "no_show", "complaint", "conduct", "other"];
 

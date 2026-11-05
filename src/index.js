@@ -11,6 +11,7 @@ import FORM_HTML from "./webapp.html";
 import ADMIN_HTML from "./admin.html";
 import AGENT_HTML from "./agent.html";
 import { handleAgentApi } from "./agent-api.js";
+import { handleDocsApi } from "./docs-api.js";
 
 // የቅጹ ምርጫዎች — ደንቦቹ በዳሽቦርድ ስለሚቀየሩ በቅንብሮች ስሪት ይታደሳል
 const pages = new Map();
@@ -24,7 +25,7 @@ function page(key, html, brand) {
       FUEL_TYPES: C.FUEL_TYPES, GREEN_FUELS: C.GREEN_FUELS, SEATS: C.SEATS, PLATE_REGIONS: C.PLATE_REGIONS, SERVICES: C.SERVICES,
       SHIFTS: C.SHIFTS, PHONE_TYPES: C.PHONE_TYPES, MIN_AGE: C.MIN_AGE, MAX_AGE: C.MAX_AGE, MAX_VEHICLE_AGE: C.MAX_VEHICLE_AGE,
       INSPECTION_AFTER_YEARS: C.INSPECTION_AFTER_YEARS, ALLOWED_PLATE_CODES: C.ALLOWED_PLATE_CODES, TEST_FOR_NO_CAR: C.TEST_FOR_NO_CAR,
-      I18N: Object.fromEntries(Object.entries(STRINGS).map(([k, v]) => [k, { f: v.f, opt: v.opt, lang_name: v.lang_name, reasons: v.reasons }])),
+      I18N: Object.fromEntries(Object.entries(STRINGS).map(([k, v]) => [k, { f: v.f, opt: v.opt, lang_name: v.lang_name, reasons: v.reasons, docs: v.docs }])),
     }).replace(/</g, "\\u003c");
     pages.set(k, html.replace("__OPTIONS__", OPTIONS).replaceAll("__BRAND__", brand.replace(/[<>&"]/g, "")));
   }
@@ -77,6 +78,7 @@ export default {
 
     if (path === "/api/me" || path === "/api/register") return handleApi(request, env, path, getBot);
     if (path.startsWith("/api/agent/")) return handleAgentApi(request, env, path, getBot);
+    if (path.startsWith("/api/docs/")) return handleDocsApi(request, env, path, getBot);
 
     if (path === "/webhook" || path === "/") {
       if (request.headers.get("X-Telegram-Bot-Api-Secret-Token") !== env.WEBHOOK_SECRET) return new Response("Unauthorized", { status: 401 });

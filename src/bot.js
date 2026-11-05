@@ -60,7 +60,7 @@ function register(bot, env) {
   /** የጋራ ድርጊት ውጤትን በካርዱ ላይ ማሳየት */
   async function done(ctx, id, res, okText, note) {
     if (!res.ok) {
-      await ctx.answerCallbackQuery({ text: res.error, show_alert: true });
+      await ctx.answerCallbackQuery({ text: String(res.error).slice(0, 195), show_alert: true });
       return refreshCard(ctx, id);
     }
     await ctx.answerCallbackQuery({ text: okText });
@@ -191,6 +191,11 @@ function register(bot, env) {
     await done(ctx, id, await A.fail(env, ctx.api, id, actor(ctx)), "❌ ተመዝግቧል", "🔴 አላለፈም");
   });
 
+  admin.callbackQuery(/^ext:(\d+)$/, async (ctx) => {
+    const id = Number(ctx.match[1]);
+    await done(ctx, id, await A.extendDocs(env, ctx.api, id, actor(ctx), 7), "✅ +7 ቀን ተራዝሟል", "⏳ የሰነድ ጊዜ በ7 ቀን ተራዝሟል");
+  });
+
   admin.callbackQuery(/^act:(\d+)$/, async (ctx) => {
     const id = Number(ctx.match[1]);
     await done(ctx, id, await A.activate(env, ctx.api, id, actor(ctx), "በቀጥታ"), "✅ ለስራ ዝግጁ ሆኗል", "🟢 በቀጥታ ለስራ ዝግጁ ሆኗል");
@@ -295,6 +300,17 @@ function register(bot, env) {
     if (!d || d.agent_id !== st.id) return ctx.answerCallbackQuery({ text: "ይህ አሽከርካሪ የእርስዎ አይደለም።", show_alert: true });
     await ctx.answerCallbackQuery();
     await A.askNextDocument(ctx.api, env, id);
+  });
+
+  priv.callbackQuery(/^agskip:(-?\d+):(\w+)$/, async (ctx) => {
+    const st = await staffOf(ctx);
+    const d = st ? await db.getDriver(DB, Number(ctx.match[1])) : null;
+    if (!d || d.agent_id !== st.id || d.status !== "awaiting_docs") return ctx.answerCallbackQuery({ text: "አሁን አይቻልም።", show_alert: true });
+    const res = await A.skipDoc(ctx.api, env, d.tg_id, ctx.match[2]);
+    if (!res.ok) return ctx.answerCallbackQuery({ text: "ይህ ሰነድ ግዴታ ነው።", show_alert: true });
+    await ctx.answerCallbackQuery({ text: "⏭ ተዘሏል" });
+    await ctx.editMessageReplyMarkup().catch(() => {});
+    await A.askNextDocument(ctx.api, env, d.tg_id);
   });
 
   // ሴልሱ ለመዘገበው (Telegram የሌለው) አሽከርካሪ ሰነድ ሲልክ
@@ -553,6 +569,17 @@ function register(bot, env) {
     await ctx.reply(T(lang, "fix_appeal_prompt"), { reply_markup: { force_reply: true } });
   });
 
+  priv.callbackQuery(/^skip:(\w+)$/, async (ctx) => {
+    const d = await db.getDriver(DB, ctx.from.id);
+    const lang = langOf(d);
+    if (d?.status !== "awaiting_docs") return ctx.answerCallbackQuery({ text: T(lang, "not_now") });
+    const res = await A.skipDoc(ctx.api, env, d.tg_id, ctx.match[1]);
+    if (!res.ok) return ctx.answerCallbackQuery({ text: T(lang, "not_now"), show_alert: true });
+    await ctx.answerCallbackQuery({ text: "⏭" });
+    await ctx.editMessageReplyMarkup().catch(() => {});
+    await A.askNextDocument(ctx.api, env, d.tg_id);
+  });
+
   priv.callbackQuery("redo", async (ctx) => {
     const d = await db.getDriver(DB, ctx.from.id);
     const lang = langOf(d);
@@ -567,7 +594,9 @@ function register(bot, env) {
     const lang = d ? langOf(d) : (await userLang(ctx)) ?? "am";
     if (!d) return ctx.reply(T(lang, "fill_form_first"), { reply_markup: formButton(env, lang) });
     const fixing = d.status === "suspended" && d.fix_docs && d.fix_state !== "submitted";
-    if (d.status !== "awaiting_docs" && !fixing) return ctx.reply(T(lang, "docs_already", { status: T(lang, `status.${d.status}`) }));
+    const late = d.status !== "awaiting_docs" && !fixing && ["pending", "test", "inspection", "orientation", "active"].includes(d.status) ? await A.docInfo(env, d) : null;
+    const lateNext = late && [...late.missingLater, ...late.missingOptional][0];
+    if (d.status !== "awaiting_docs" && !fixing && !lateNext) return ctx.reply(T(lang, "docs_already", { status: T(lang, `status.${d.status}`) }));
 
     let fileId, fileType;
     if (ctx.message.photo) {
@@ -578,6 +607,15 @@ function register(bot, env) {
       if (!/^(image\/|application\/pdf)/.test(doc.mime_type ?? "")) return ctx.reply(T(lang, "doc_only_photo"));
       fileId = doc.file_id;
       fileType = /^image\//.test(doc.mime_type) && (doc.file_size ?? 0) <= 10 * 1024 * 1024 ? "photo" : "document";
+    }
+    if (lateNext) {
+      // ማመልከቻው ከተላከ በኋላ — የጎደለውን ሰነድ ይሞላል
+      if (!(await db.insertDoc(DB, d.tg_id, lateNext, fileId, fileType))) return;
+      await ctx.reply(T(lang, "doc_received", { label: t(lang, `docs.${lateNext}`)[0] }));
+      const info = await A.docAdded(ctx.api, env, d.tg_id, lateNext);
+      const rest = info ? [...info.missingLater, ...info.missingOptional] : [];
+      if (rest.length) await ctx.reply(T(lang, "doc_step", { i: 1, n: rest.length, prompt: t(lang, `docs.${rest[0]}`)[1] }), HTML);
+      return;
     }
     if (fixing) {
       for (let attempt = 0; attempt < 4; attempt++) {
@@ -661,6 +699,38 @@ export async function runDaily(env) {
     await sms(d, "appt_reminder", vars);
     await DB.prepare("UPDATE drivers SET appt_reminded_at = datetime('now') WHERE tg_id = ?").bind(d.tg_id).run();
     sent.appt++;
+  }
+  // በኋላ የሚሟሉ ሰነዶች — ማስታወሻ በ3፣ 7 እና 12ኛ ቀን፤ ጊዜው ሲያልፍ ማመልከቻው ይቆማል
+  const MARKS = [3, 7, 12];
+  const overdueList = [];
+  for (const d of await db.docsDue(DB, 40)) {
+    const info = await A.docInfo(env, d);
+    if (!info.missingLater.length) { await DB.prepare("UPDATE drivers SET docs_due_at = NULL, docs_overdue_at = NULL WHERE tg_id = ?").bind(d.tg_id).run(); continue; }
+    const left = A.daysLeft(d);
+    const elapsed = Math.floor((Date.now() - Date.parse((d.docs_since ?? d.submitted_at ?? d.updated_at).replace(" ", "T") + "Z")) / 86400e3);
+    const lang = langOf(d);
+    const list = (l) => A.docLabels(l, info.missingLater);
+    if (left <= 0) {
+      if (d.docs_overdue_at) continue;
+      await DB.prepare("UPDATE drivers SET docs_overdue_at = datetime('now') WHERE tg_id = ?").bind(d.tg_id).run();
+      await db.logEvent(DB, d.tg_id, "system", "docs_overdue", list("am"));
+      overdueList.push(d);
+      await A.tell(env, api, d, { text: (l) => T(l, "docs_overdue", { list: esc(list(l)) }), extra: { reply_markup: A.formButton(env, lang, "btn_docs_open") },
+        sms: ["docs_reminder", (l) => ({ n: info.missingLater.length, list: list(l), days: 0 })] });
+      continue;
+    }
+    const due = MARKS.filter((m) => elapsed >= m).length;
+    if (due > (d.docs_reminders ?? 0)) {
+      await DB.prepare("UPDATE drivers SET docs_reminders = ? WHERE tg_id = ?").bind(due, d.tg_id).run();
+      await A.tell(env, api, d, { text: (l) => T(l, "docs_reminder", { list: esc(list(l)), days: left }), extra: { reply_markup: A.formButton(env, lang, "btn_docs_open") },
+        sms: ["docs_reminder", (l) => ({ n: info.missingLater.length, list: list(l), days: left })] });
+      sent.docs++;
+    }
+  }
+  if (overdueList.length) {
+    await A.notifyAdmins(api, env, `⛔ <b>የሰነድ ማሟያ ጊዜ ያለፈባቸው (${overdueList.length})</b>\n\n` +
+      overdueList.map((d) => `• ${esc(d.full_name)} ${A.driverCode(d) ? `(${A.driverCode(d)})` : ""} · ${esc(d.phone)}`).join("\n") + "\n\nበዳሽቦርዱ ጊዜውን ያራዝሙ ወይም ውድቅ ያድርጉ።",
+      { reply_markup: new InlineKeyboard().url("📊 ዳሽቦርድ", A.dashboardUrl(env)) });
   }
   const s = await db.stats(DB);
   const n = (k) => s.byStatus[k] ?? 0;

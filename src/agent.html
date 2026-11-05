@@ -136,7 +136,9 @@
       '<div class="m"><a href="tel:' + h(d.phone) + '">📞 ' + h(d.phone) + "</a>" + (d.no_tg ? ' · <span class="tag">📵 Telegram የለውም</span>' : "") + (d.code ? " · " + h(d.code) : "") + (extra || "") + "</div>" +
       '<div class="m">→ ' + h(d.next) + (d.appt ? " · 📅 " + h(d.appt) : "") + (d.reason ? " · " + h(d.reason) : "") + "</div>" +
       (d.commission ? '<div class="m">💰 ' + birr(d.commission) + (d.commission_paid ? " · ተከፍሏል ✓" : " · ያልተከፈለ") + "</div>" : "") +
-      (d.no_tg && d.status === "awaiting_docs" && !extra ? '<div class="act"><button class="btn sm" data-collect="' + d.tg_id + '">📎 ሰነዶቹን በቻት ላክ</button></div>' : "") + "</div>";
+      (d.docs_due ? '<div class="' + (d.docs_overdue ? "warn" : "muted") + '" style="font-size:13px;margin-top:4px">' + (d.docs_overdue ? "⛔ የሰነድ ጊዜ አልፏል" : "📎 ሰነድ ይጎድላል · " + d.docs_left + " ቀን") + "</div>" : "") +
+      (d.no_tg && d.status === "awaiting_docs" && !extra ? '<div class="act"><button class="btn sm" data-docs="' + d.tg_id + '">📷 ሰነዶቹን እዚህ ላክ</button> <button class="btn sm" data-collect="' + d.tg_id + '">💬 በቻት ላክ</button></div>' :
+        d.no_tg && d.docs_due && !extra ? '<div class="act"><button class="btn sm" data-docs="' + d.tg_id + '">📎 የቀሩትን ሰነዶች ላክ</button></div>' : "") + "</div>";
   }
   function driversTab() {
     var m = $("#main");
@@ -144,6 +146,7 @@
     m.innerHTML = '<div class="chips">' + FILTERS.map(function (f) { return '<button data-f="' + f[0] + '" class="' + (filter === f[0] ? "on" : "") + '">' + f[1] + "</button>"; }).join("") + "</div>" +
       (rows.length ? rows.map(function (d) { return driverCard(d); }).join("") : '<div class="empty">እዚህ ምንም የለም።</div>');
     [].forEach.call(m.querySelectorAll("[data-f]"), function (b) { b.onclick = function () { filter = b.dataset.f; driversTab(); }; });
+    [].forEach.call(m.querySelectorAll("[data-docs]"), function (b) { b.onclick = function () { location.href = "/?agent=1&docs=" + encodeURIComponent(b.dataset.docs); }; });
     [].forEach.call(m.querySelectorAll("[data-collect]"), function (b) {
       b.onclick = function () {
         b.disabled = true;
